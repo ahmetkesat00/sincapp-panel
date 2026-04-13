@@ -115,7 +115,7 @@ export type Event = {
 };
 
 
-/* ---------------- CHART ---------------- */
+/* --- CHART --- */
 
 export type ChartDataItem = {
   label: string;
