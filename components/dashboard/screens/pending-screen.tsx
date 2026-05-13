@@ -5,7 +5,7 @@ export default function PendingScreen() {
     <div className="flex min-h-[60vh] items-center justify-center p-6">
       <div className="w-full max-w-md text-center">
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-300 border-t-blue-600" />
+          <span className="text-3xl">⏳</span>
         </div>
         <h1 className="text-xl font-bold text-slate-900">İnceleme Bekleniyor</h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">
