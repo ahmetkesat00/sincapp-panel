@@ -60,6 +60,7 @@ type CafeItem = {
   logoUrl: string;
   openTime: string;
   closeTime: string;
+  hasWorkingHours: boolean;
   loyaltyCardsCount: number;
   rejectionNote: string;
   ownerEmail: string;
@@ -297,6 +298,12 @@ export default function AdminPage() {
                 logoUrl: safeString(d.logoUrl),
                 openTime: safeString(d.openTime),
                 closeTime: safeString(d.closeTime),
+                hasWorkingHours: (() => {
+                  const wh = d.workingHours;
+                  if (wh && typeof wh === "object")
+                    return Object.values(wh).some((v: any) => v?.isOpen === true);
+                  return !!(d.openTime && d.closeTime);
+                })(),
                 loyaltyCardsCount: loyaltyCards.length,
                 rejectionNote: safeString(d.rejectionNote),
                 ownerEmail: "",
@@ -1497,8 +1504,8 @@ export default function AdminPage() {
                     </div>
                     <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
                       <p className="text-slate-400 font-medium">Çalışma Saatleri</p>
-                      <p className="text-slate-700 mt-0.5">
-                        {cafe.openTime && cafe.closeTime ? `${cafe.openTime} – ${cafe.closeTime}` : "—"}
+                      <p className={`mt-0.5 font-semibold ${cafe.hasWorkingHours ? "text-emerald-700" : "text-red-600"}`}>
+                        {cafe.hasWorkingHours ? "Ayarlandı" : "Girilmedi"}
                       </p>
                     </div>
                     <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
