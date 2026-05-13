@@ -380,7 +380,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
       {cropImage && (
         <ImageCropper
           image={cropImage}
-          aspect={1080 / 720}
+          aspect={4 / 5}
           onCropComplete={(_, croppedAreaPixels) =>
             setCropArea(croppedAreaPixels)
           }
@@ -607,7 +607,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
                     Ürün Görseli
                   </label>
                   <p className="mb-3 text-xs text-slate-400">
-                    Önerilen: 1080×720 px (3:2)
+                    Önerilen: Instagram fotoğrafı (4:5)
                   </p>
                   {form.productImagePreview && (
                     <div className="mb-3 relative h-32 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
