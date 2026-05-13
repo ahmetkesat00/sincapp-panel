@@ -98,6 +98,7 @@ export default function DashboardPage() {
   });
 
   const [loyaltyCardsCount, setLoyaltyCardsCount] = useState(0);
+  const [hasWorkingHours, setHasWorkingHours] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const [loyaltyForm, setLoyaltyForm] = useState<LoyaltyForm>({
@@ -170,6 +171,13 @@ export default function DashboardPage() {
         const cards = Array.isArray(cafeData?.loyaltyCards) ? cafeData.loyaltyCards : [];
         setLoyaltyCardsCount(cards.length);
 
+        // Çalışma saatleri kontrolü: workingHours objesi veya eski openTime/closeTime
+        const wh = cafeData?.workingHours;
+        const hasWH = wh && typeof wh === "object"
+          ? Object.values(wh).some((d: any) => d?.isOpen === true)
+          : !!(cafeData?.openTime && cafeData?.closeTime);
+        setHasWorkingHours(hasWH);
+
         setLoyaltyForm({
           rewardBuy: cafeData?.rewardBuy ?? 0,
           rewardGift: cafeData?.rewardGift ?? 0,
@@ -203,8 +211,8 @@ export default function DashboardPage() {
       category: !!businessForm.category,
       address: !!businessForm.address.trim(),
       coords: hasCoords,
-      openTime: !!businessForm.openTime,
-      closeTime: !!businessForm.closeTime,
+      openTime: hasWorkingHours || !!businessForm.openTime,
+      closeTime: hasWorkingHours || !!businessForm.closeTime,
       loyaltyCard: loyaltyCardsCount >= 1,
     };
   }
