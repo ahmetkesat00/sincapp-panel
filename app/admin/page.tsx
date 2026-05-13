@@ -189,7 +189,6 @@ export default function AdminPage() {
 
   // ── Bekleyen Başvurular state ──
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
-  const [pendingCafeNames, setPendingCafeNames] = useState<Record<string, string>>({});
   const [approvingUid, setApprovingUid] = useState("");
   const [rejectingUid, setRejectingUid] = useState("");
   const [pendingMessage, setPendingMessage] = useState("");
@@ -1175,12 +1174,6 @@ export default function AdminPage() {
 
   // ── Başvuru Onayla ──
   async function handleApproveUser(pendingUser: PendingUser) {
-    const cafeName = (pendingCafeNames[pendingUser.uid] || "").trim();
-    if (!cafeName) {
-      setPendingError(`${pendingUser.fullName} için kafe adı giriniz.`);
-      return;
-    }
-
     setApprovingUid(pendingUser.uid);
     setPendingMessage("");
     setPendingError("");
@@ -1192,7 +1185,7 @@ export default function AdminPage() {
 
       batch.set(cafeRef, {
         ownerUid: pendingUser.uid,
-        name: cafeName,
+        name: "",
         category: "",
         openTime: "",
         closeTime: "",
@@ -1431,12 +1424,6 @@ export default function AdminPage() {
                       <p className="mt-0.5 text-xs text-slate-400">Başvuru: {u.createdAtText}</p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-                      <input
-                        value={pendingCafeNames[u.uid] || ""}
-                        onChange={(e) => setPendingCafeNames((prev) => ({ ...prev, [u.uid]: e.target.value }))}
-                        placeholder="Kafe adı girin..."
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                      />
                       <button
                         type="button"
                         onClick={() => handleApproveUser(u)}
