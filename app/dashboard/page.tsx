@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -42,6 +42,8 @@ import CustomersTab from "@/components/dashboard/tabs/customers-tab";
 import ReportsTab from "@/components/dashboard/tabs/reports-tab";
 import SettingsTab from "@/components/dashboard/tabs/settings-tab";
 import EventsTab from "@/components/dashboard/tabs/events-tab";
+import SetupBanner from "@/components/dashboard/screens/setup-banner";
+import PendingScreen from "@/components/dashboard/screens/pending-screen";
 
 import {
   formatLocationValue,
@@ -50,9 +52,6 @@ import {
 
 import type {
   BusinessForm,
-  Campaign,
-  Customer,
-  DashboardStats,
   LoyaltyForm,
   NavId,
   NavItem,
@@ -95,41 +94,20 @@ export default function DashboardPage() {
     isOpen: false,
     isVisible: false,
     approvalStatus: "",
+    rejectionNote: "",
   });
+
+  const [loyaltyCardsCount, setLoyaltyCardsCount] = useState(0);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const [loyaltyForm, setLoyaltyForm] = useState<LoyaltyForm>({
     rewardBuy: 0,
     rewardGift: 0,
-    rewardTitle: "",
-    maxDailyStamp: 0,
-    programActive: false,
-    expiryDays: 0,
+    programDescription: "",
+    productImageUrl: "",
   });
 
-  const [selectedItemType, setSelectedItemType] = useState<string>("");
 
-  const [loyaltySaving, setLoyaltySaving] = useState(false);
-  const [loyaltyMessage, setLoyaltyMessage] = useState("");
-
-  const [campaigns] = useState<Campaign[]>([]);
-  const [customers] = useState<Customer[]>([]);
-
-  const [stats] = useState<DashboardStats>({
-    todayStamps: 0,
-    activeCards: 0,
-    totalRewards: 0,
-    activeCampaigns: 0,
-  });
-
-  const [weeklyStampData] = useState([
-    { label: "Pzt", value: 0 },
-    { label: "Sal", value: 0 },
-    { label: "Çar", value: 0 },
-    { label: "Per", value: 0 },
-    { label: "Cum", value: 0 },
-    { label: "Cmt", value: 0 },
-    { label: "Paz", value: 0 },
-  ]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -185,19 +163,19 @@ export default function DashboardPage() {
           description: cafeData?.description ?? "",
           isOpen: cafeData?.isActive ?? false,
           isVisible: cafeData?.isVisible ?? false,
-          approvalStatus: cafeData?.approvalStatus ?? "",
+          approvalStatus: cafeData?.approvalStatus ?? "draft",
+          rejectionNote: cafeData?.rejectionNote ?? "",
         });
+
+        const cards = Array.isArray(cafeData?.loyaltyCards) ? cafeData.loyaltyCards : [];
+        setLoyaltyCardsCount(cards.length);
 
         setLoyaltyForm({
           rewardBuy: cafeData?.rewardBuy ?? 0,
           rewardGift: cafeData?.rewardGift ?? 0,
-          rewardTitle: cafeData?.rewardTitle ?? "",
-          maxDailyStamp: cafeData?.maxDailyStamp ?? 0,
-          programActive: cafeData?.programActive ?? false,
-          expiryDays: cafeData?.expiryDays ?? 0,
+          programDescription: cafeData?.programDescription ?? "",
+          productImageUrl: cafeData?.productImageUrl ?? "",
         });
-
-        setSelectedItemType(cafeData?.itemTypeId ?? "");
 
         setLastUpdatedText(
           formatTimestamp((cafeData?.updatedAt as Timestamp) ?? null)
@@ -213,57 +191,54 @@ export default function DashboardPage() {
     return () => unsub();
   }, [router]);
 
-  async function handleSaveLoyalty() {
-    if (!cafeId || !selectedItemType || loyaltyForm.rewardBuy <= 0) {
-      setLoyaltyMessage("❌ Item türü ve damga sayısı zorunlu!");
-      return;
-    }
+  // Zorunlu alanlar dolumu kontrol
+  function getRequiredFieldsStatus() {
+    const hasCoords = (() => {
+      const parts = businessForm.location.split(",");
+      return parts.length === 2 && parts.every((p) => !isNaN(parseFloat(p.trim())) && p.trim() !== "");
+    })();
+    return {
+      cafeName: !!businessForm.cafeName.trim(),
+      logo: !!businessForm.logoUrl,
+      category: !!businessForm.category,
+      address: !!businessForm.address.trim(),
+      coords: hasCoords,
+      openTime: !!businessForm.openTime,
+      closeTime: !!businessForm.closeTime,
+      loyaltyCard: loyaltyCardsCount >= 1,
+    };
+  }
 
-    setLoyaltySaving(true);
+  async function handleSubmitForReview() {
+    const fields = getRequiredFieldsStatus();
+    const allFilled = Object.values(fields).every(Boolean);
+    if (!allFilled) return;
 
+    setIsSubmittingReview(true);
     try {
-      const rewardGift = loyaltyForm.rewardBuy + 1;
-
-      const rewardTitle = `${loyaltyForm.rewardBuy} ${selectedItemType} siparişine, ${rewardGift}. hediye`;
-
       await updateDoc(doc(db, "cafes", cafeId), {
-        itemTypeId: selectedItemType,
-        rewardBuy: loyaltyForm.rewardBuy,
-        rewardGift,
-        rewardTitle,
-        maxDailyStamp: loyaltyForm.maxDailyStamp,
-        programActive: loyaltyForm.programActive,
-        expiryDays: loyaltyForm.expiryDays,
+        approvalStatus: "pending",
         updatedAt: serverTimestamp(),
       });
-
-      setLoyaltyMessage("✅ Sadakat programı kaydedildi!");
-      setLastUpdatedText(new Date().toLocaleString("tr-TR"));
-    } catch (error) {
-      console.error("Loyalty save error:", error);
-      setLoyaltyMessage("❌ Kaydedilirken hata oluştu.");
+      setBusinessForm((prev) => ({ ...prev, approvalStatus: "pending" }));
+    } catch (err) {
+      console.error(err);
     } finally {
-      setLoyaltySaving(false);
+      setIsSubmittingReview(false);
     }
   }
 
-  const topCampaignData = useMemo(() => {
-    if (campaigns.length === 0) {
-      return [
-        { label: "Kampanya 1", value: 0 },
-        { label: "Kampanya 2", value: 0 },
-        { label: "Kampanya 3", value: 0 },
-      ];
+  async function handleStartEditing() {
+    try {
+      await updateDoc(doc(db, "cafes", cafeId), {
+        approvalStatus: "draft",
+        updatedAt: serverTimestamp(),
+      });
+      setBusinessForm((prev) => ({ ...prev, approvalStatus: "draft" }));
+    } catch (err) {
+      console.error(err);
     }
-
-    return campaigns
-      .slice()
-      .sort((a, b) => b.usageCount - a.usageCount)
-      .map((item) => ({
-        label: item.title,
-        value: item.usageCount,
-      }));
-  }, [campaigns]);
+  }
 
   function renderPage() {
     switch (activePage) {
@@ -274,12 +249,6 @@ export default function DashboardPage() {
           <DashboardTab
             businessForm={businessForm}
             loyaltyForm={loyaltyForm}
-            stats={stats}
-            customers={customers}
-            campaigns={campaigns}
-            weeklyStampData={weeklyStampData}
-            topCampaignData={topCampaignData}
-            previewText=""
           />
         );
 
@@ -291,17 +260,8 @@ export default function DashboardPage() {
       case "loyalty":
         return (
           <LoyaltyTab
+            cafeId={cafeId}
             businessForm={businessForm}
-            loyaltyForm={loyaltyForm}
-            previewText={`${loyaltyForm.rewardBuy} damga → ${loyaltyForm.rewardGift} hediye`}
-            updateLoyaltyField={(key, value) =>
-              setLoyaltyForm((prev) => ({ ...prev, [key]: value }))
-            }
-            selectedItemType={selectedItemType}
-            setSelectedItemType={setSelectedItemType}
-            onSave={handleSaveLoyalty}
-            isSaving={loyaltySaving}
-            message={loyaltyMessage}
           />
         );
 
@@ -342,6 +302,39 @@ export default function DashboardPage() {
     );
   }
 
+  const status = businessForm.approvalStatus;
+
+  // pending → sadece bekleme ekranı göster
+  if (status === "pending") {
+    return (
+      <DashboardLayout
+        sidebar={
+          <DashboardSidebar
+            navItems={navItems}
+            activePage={activePage}
+            onChangePage={setActivePage}
+            cafeName={businessForm.cafeName}
+            category={businessForm.category}
+            onLogout={() => signOut(auth)}
+          />
+        }
+        header={
+          <DashboardHeader
+            activePage={activePage}
+            navItems={navItems}
+            lastUpdatedText={lastUpdatedText}
+          />
+        }
+      >
+        <PendingScreen />
+      </DashboardLayout>
+    );
+  }
+
+  // draft veya rejected → normal dashboard + setup banner
+  const isDraftOrRejected = status === "draft" || status === "rejected";
+  const fields = isDraftOrRejected ? getRequiredFieldsStatus() : null;
+
   return (
     <DashboardLayout
       sidebar={
@@ -362,6 +355,15 @@ export default function DashboardPage() {
         />
       }
     >
+      {isDraftOrRejected && fields && (
+        <SetupBanner
+          fields={fields}
+          isRejected={status === "rejected"}
+          rejectionNote={businessForm.rejectionNote}
+          onSubmit={handleSubmitForReview}
+          isSubmitting={isSubmittingReview}
+        />
+      )}
       {renderPage()}
     </DashboardLayout>
   );

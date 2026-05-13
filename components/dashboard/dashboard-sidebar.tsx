@@ -30,7 +30,7 @@ export default function DashboardSidebar({
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">
-                SincApp
+                LoopyGo
               </p>
               <p className="mt-1 text-sm font-semibold text-white">
                 Owner Panel

@@ -7,25 +7,23 @@ import {
   orderBy,
   query,
   addDoc,
-  serverTimestamp,
   doc,
   updateDoc,
+  serverTimestamp,
   where,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { auth } from "@/lib/firebase";
-import { httpsCallable, getFunctions } from "firebase/functions"; // ✅ FİX
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage, auth } from "@/lib/firebase";
+import { httpsCallable, getFunctions } from "firebase/functions";
 import { QRCodeSVG as QRCode } from "qrcode.react";
+import ImageCropper from "../ui/image-cropper";
+import getCroppedImg from "@/lib/cropImage";
 import SectionTitle from "../ui/section-title";
-import Toggle from "../ui/toggle";
 import { fieldClass, shellCardClass } from "../helpers";
-import type { BusinessForm, LoyaltyForm } from "../types";
+import type { BusinessForm, LoyaltyCard } from "../types";
 
-type ItemType = {
-  id: string;
-  name: string;
-  order: number;
-};
+const ITEM_TYPES = ["Kahve", "Tatlı", "Pizza", "Hamburger", "Diğer"];
+const MAX_CARDS = 3;
 
 type PendingToken = {
   id: string;
@@ -36,261 +34,338 @@ type PendingToken = {
   type: string;
   createdAt: any;
   scannedAt: any;
-  processedType?: string;
   [key: string]: any;
 };
 
-type Props = {
-  businessForm: BusinessForm;
-  loyaltyForm: LoyaltyForm;
-  previewText: string;
-  updateLoyaltyField: <K extends keyof LoyaltyForm>(
-    key: K,
-    value: LoyaltyForm[K]
-  ) => void;
-  selectedItemType: string;
-  setSelectedItemType: (value: string) => void;
-  onSave: () => Promise<void>;
-  isSaving: boolean;
-  message: string;
+type FormState = {
+  itemTypeId: string;
+  rewardBuy: number;
+  programDescription: string;
+  productImageFile: File | null;
+  productImagePreview: string;
 };
 
-export default function LoyaltyTab({
-  businessForm,
-  loyaltyForm,
-  previewText,
-  updateLoyaltyField,
-  selectedItemType,
-  setSelectedItemType,
-  onSave,
-  isSaving,
-  message,
-}: Props) {
-  const [itemTypes, setItemTypes] = useState<ItemType[]>([]);
+const emptyForm = (): FormState => ({
+  itemTypeId: "",
+  rewardBuy: 5,
+  programDescription: "",
+  productImageFile: null,
+  productImagePreview: "",
+});
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+type Props = {
+  cafeId: string;
+  businessForm: BusinessForm;
+};
+
+export default function LoyaltyTab({ cafeId, businessForm }: Props) {
+  // Kartlar — cafes/{cafeId}.loyaltyCards array'inden gelir
+  const [cards, setCards] = useState<LoyaltyCard[]>([]);
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm());
+  const [cropImage, setCropImage] = useState<string | null>(null);
+  const [cropArea, setCropArea] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
   const [qrValue, setQrValue] = useState<string | null>(null);
   const [isCreatingQR, setIsCreatingQR] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
   const [pendingTokens, setPendingTokens] = useState<PendingToken[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  const cafeIdField = businessForm?.cafeId || null;
   const functions = getFunctions(undefined, "europe-west1");
+
   // ==========================================
-  // businessForm kontrol
+  // Café dökümanındaki loyaltyCards array'ini dinle
   // ==========================================
   useEffect(() => {
-    console.log("========================================");
-    console.log("🔍 BUSINESSFORM KONTROL");
-    console.log("========================================");
-    console.log("📊 businessForm:", businessForm);
-    console.log("✅ cafeId (Kullanılacak):", businessForm?.cafeId);
-
-    if (!cafeIdField) {
-      console.error("❌ ERR: businessForm'da cafeId alanı yok!");
-    } else {
-      console.log("✅ HAZIR! Kullanılacak cafeId:", cafeIdField);
-    }
-    console.log("========================================");
-  }, [businessForm, cafeIdField]);
-
-  // ==========================================
-  // Item Types yükleme
-  // ==========================================
-  useEffect(() => {
-    const itemTypesQuery = query(
-      collection(db, "itemTypes"),
-      orderBy("order", "asc")
-    );
-
-    const unsubscribe = onSnapshot(itemTypesQuery, (snap) => {
-      const items: ItemType[] = snap.docs.map((doc) => ({
-        id: doc.id,
-        name: (doc.data() as Record<string, unknown>).name as string,
-        order: (doc.data() as Record<string, unknown>).order as number,
-      }));
-      setItemTypes(items);
+    if (!cafeId) return;
+    return onSnapshot(doc(db, "cafes", cafeId), (snap) => {
+      const raw: LoyaltyCard[] = snap.data()?.loyaltyCards ?? [];
+      setCards([...raw].sort((a, b) => a.position - b.position));
     });
-
-    return () => unsubscribe();
-  }, []);
+  }, [cafeId]);
 
   // ==========================================
-  // Pending QR Tokens dinleme (SCANNED durumunda)
+  // Pending tokens
   // ==========================================
   useEffect(() => {
-    if (!cafeIdField) {
-      console.log("❌ cafeIdField boş, query başlatılmadı");
+    if (!cafeId) {
       setPendingTokens([]);
       return;
     }
-
-    console.log("🔄 Pending tokens listener başlatıldı. cafeId:", cafeIdField);
-
     const q = query(
       collection(db, "qrTokens"),
-      where("cafeId", "==", cafeIdField),
-      where("status", "==", "scanned"), // ✅ SADECE scanned durumu
+      where("cafeId", "==", cafeId),
+      where("status", "==", "scanned"),
       orderBy("scannedAt", "desc")
     );
-
-    const unsubscribe = onSnapshot(
+    return onSnapshot(
       q,
-      (snap) => {
-        const list = snap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        } as PendingToken));
-
-        setPendingTokens(list);
-        console.log("📋 Bekleyen işlemler güncellendi:", list.length, "adet");
-        list.forEach((item) => {
-          console.log(`   - ${item.id.slice(0, 12)}... | User: ${item.scannedUserId}`);
-        });
-      },
-      (error) => {
-        console.error("❌ Snapshot listener hatası:", error);
-      }
+      (snap) =>
+        setPendingTokens(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as PendingToken))
+        ),
+      console.error
     );
-
-    return () => {
-      console.log("🛑 Pending tokens listener kapatıldı");
-      unsubscribe();
-    };
-  }, [cafeIdField]);
+  }, [cafeId]);
 
   // ==========================================
-  // QR Oluştur
+  // Array'i Firestore'a yaz (tek updateDoc)
+  // ==========================================
+  async function persistCards(newCards: LoyaltyCard[]) {
+    await updateDoc(doc(db, "cafes", cafeId), {
+      loyaltyCards: newCards,
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  // ==========================================
+  // Image crop
+  // ==========================================
+  function handleProductImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage("❌ Görsel 10MB'tan küçük olmalı.");
+      return;
+    }
+    setCropImage(URL.createObjectURL(file));
+    setCropArea(null);
+    e.target.value = "";
+  }
+
+  async function applyCrop() {
+    if (!cropImage || !cropArea) return;
+    try {
+      const blob = await getCroppedImg(cropImage, cropArea);
+      if (!blob) return;
+      const file = new File([blob], "loyalty_product.jpg", {
+        type: "image/jpeg",
+      });
+      setForm((prev) => ({
+        ...prev,
+        productImageFile: file,
+        productImagePreview: URL.createObjectURL(file),
+      }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCropImage(null);
+      setCropArea(null);
+    }
+  }
+
+  // ==========================================
+  // Form aç / kapat
+  // ==========================================
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm());
+    setShowForm(true);
+    setMessage("");
+  }
+
+  function openEdit(card: LoyaltyCard) {
+    setEditingId(card.id);
+    setForm({
+      itemTypeId: card.itemTypeId,
+      rewardBuy: card.rewardBuy,
+      programDescription: card.programDescription,
+      productImageFile: null,
+      productImagePreview: card.productImageUrl || "",
+    });
+    setShowForm(true);
+    setMessage("");
+  }
+
+  function cancelForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm());
+  }
+
+  // ==========================================
+  // Kaydet (ekle veya güncelle)
+  // ==========================================
+  async function handleSave() {
+    if (!form.itemTypeId || form.rewardBuy <= 0) {
+      setMessage("❌ Item türü ve damga sayısı zorunlu!");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      let productImageUrl = editingId
+        ? (cards.find((c) => c.id === editingId)?.productImageUrl ?? "")
+        : "";
+
+      if (form.productImageFile) {
+        const storageRef = ref(
+          storage,
+          `cafes/${cafeId}/loyalty_product_${Date.now()}.jpg`
+        );
+        await uploadBytes(storageRef, form.productImageFile, {
+          contentType: "image/jpeg",
+        });
+        productImageUrl = await getDownloadURL(storageRef);
+      }
+
+      let newCards: LoyaltyCard[];
+
+      if (editingId) {
+        newCards = cards.map((c) =>
+          c.id === editingId
+            ? {
+                ...c,
+                itemTypeId: form.itemTypeId,
+                rewardBuy: form.rewardBuy,
+                rewardGift: form.rewardBuy + 1,
+                programDescription: form.programDescription.trim(),
+                productImageUrl,
+              }
+            : c
+        );
+        setMessage("✅ Kart güncellendi!");
+      } else {
+        const newCard: LoyaltyCard = {
+          id: generateId(),
+          position: cards.length + 1,
+          itemTypeId: form.itemTypeId,
+          rewardBuy: form.rewardBuy,
+          rewardGift: form.rewardBuy + 1,
+          programDescription: form.programDescription.trim(),
+          productImageUrl,
+        };
+        newCards = [...cards, newCard];
+        setMessage("✅ Yeni kart oluşturuldu!");
+      }
+
+      await persistCards(newCards);
+      cancelForm();
+    } catch (err) {
+      console.error(err);
+      setMessage("❌ Kaydedilirken hata oluştu.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // ==========================================
+  // Sil + kalan kartların pozisyonunu kaydır
+  // ==========================================
+  async function handleDelete(card: LoyaltyCard) {
+    if (!window.confirm("Bu sadakat kartını silmek istiyor musunuz?")) return;
+
+    const filtered = cards.filter((c) => c.id !== card.id);
+    // Pozisyonları 1'den başlayarak yeniden ata
+    const reindexed = filtered.map((c, i) => ({ ...c, position: i + 1 }));
+
+    try {
+      await persistCards(reindexed);
+      setMessage("✅ Kart silindi.");
+    } catch (err) {
+      console.error(err);
+      setMessage("❌ Silme başarısız.");
+    }
+  }
+
+  // ==========================================
+  // Sıra değiştir (swap)
+  // ==========================================
+  async function moveCard(card: LoyaltyCard, direction: "up" | "down") {
+    const targetPos =
+      direction === "up" ? card.position - 1 : card.position + 1;
+    const other = cards.find((c) => c.position === targetPos);
+    if (!other) return;
+
+    const newCards = cards.map((c) => {
+      if (c.id === card.id) return { ...c, position: targetPos };
+      if (c.id === other.id) return { ...c, position: card.position };
+      return c;
+    });
+
+    try {
+      await persistCards(newCards);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // ==========================================
+  // QR oluştur
   // ==========================================
   const handleCreateQR = async () => {
     setQrError(null);
     setQrValue(null);
-
-    if (!cafeIdField) {
-      const errorMsg =
-        "❌ Kafe ID'si (cafeId) bulunamadı. Lütfen businessForm kontrol et.";
-      setQrError(errorMsg);
-      console.error(errorMsg);
-      console.error("cafeIdField değeri:", cafeIdField);
+    if (!cafeId) {
+      setQrError("Kafe bilgileri yüklenemedi.");
       return;
     }
-
     if (!auth.currentUser) {
-      const errorMsg = "❌ Oturum açmanız gerekiyor.";
-      setQrError(errorMsg);
-      console.error(errorMsg);
+      setQrError("Oturum açmanız gerekiyor.");
       return;
     }
-
     try {
       setIsCreatingQR(true);
-      console.log("========================================");
-      console.log("📱 QR Oluşturuluyor...");
-      console.log("   Koleksiyon: qrTokens");
-      console.log("   cafeId:", cafeIdField);
-      console.log("   userId (kasiyer):", auth.currentUser.uid);
-
       const docRef = await addDoc(collection(db, "qrTokens"), {
-        cafeId: cafeIdField,
-        userId: null, // Henüz taranmamış
+        cafeId,
+        userId: null,
         type: "stamp",
-        status: "pending", // İlk status
+        status: "pending",
         createdBy: "cashier",
         createdAt: serverTimestamp(),
-        expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 2 dakika
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
         scannedAt: null,
         scannedUserId: null,
       });
-
-      const qrData = `app://scan?txId=${docRef.id}`;
-      setQrValue(qrData);
-
-      console.log("✅ QR başarıyla oluşturuldu!");
-      console.log("   Doc ID:", docRef.id);
-      console.log("   QR Data:", qrData);
-      console.log("   Status: pending");
-      console.log("========================================");
+      setQrValue(`app://scan?txId=${docRef.id}`);
     } catch (error) {
-      console.error("❌ QR oluşturma hatası:", error);
-
-      if (error instanceof Error) {
-        setQrError(`❌ Hata: ${error.message}`);
-      } else {
-        setQrError("❌ Bilinmeyen hata oluştu. Lütfen konsolu kontrol et.");
-      }
+      console.error(error);
+      setQrError("QR oluşturulurken hata oluştu. Tekrar deneyin.");
     } finally {
       setIsCreatingQR(false);
     }
   };
 
   // ==========================================
-  // İşlem Yap (Damga Ver / Ödül Kullan)
-  // ✅ DÜZELTILDI: Cloud Function çağrılıyor
+  // İşlem yap / reddet
   // ==========================================
   const handleProcess = async (
     txId: string,
     processType: "stamp" | "redeem",
     userId: string
   ) => {
-    if (!cafeIdField) {
-      console.error("❌ cafeId eksik");
-      return;
-    }
-
+    if (!cafeId) return;
     try {
       setIsProcessing(txId);
-      console.log("========================================");
-      console.log("⏳ İşlem başladı...");
-      console.log("   txId:", txId);
-      console.log("   processType:", processType);
-      console.log("   userId:", userId);
-
-      // ✅ Cloud Function çağır (approveQrToken)
-      // Bu function Firestore'da points güncelleyecek
       const approveQrToken = httpsCallable(functions, "approveQrToken");
-      await approveQrToken({
-        txId,
-        type: processType,
-      });
-
-      console.log("✅ Cloud Function çağrıldı");
-      console.log("   Token status: processed");
-      console.log("   Points güncellenecek");
-      console.log("========================================");
+      await approveQrToken({ txId, type: processType });
     } catch (error) {
-      console.error("❌ İşlem hatası:", error);
-
-      if (error instanceof Error) {
-        alert(`Hata: ${error.message}`);
-      } else {
-        alert("Bilinmeyen hata oluştu");
-      }
+      console.error(error);
+      alert(
+        error instanceof Error ? `Hata: ${error.message}` : "Bilinmeyen hata"
+      );
     } finally {
       setIsProcessing(null);
     }
   };
 
-  // ==========================================
-  // İşlemi Reddet
-  // ✅ DÜZELTILDI: Cloud Function çağrılıyor
-  // ==========================================
   const handleReject = async (txId: string) => {
     try {
       setIsProcessing(txId);
-      console.log("========================================");
-      console.log("❌ İşlem reddediliyor...");
-      console.log("   txId:", txId);
-
-      // ✅ Cloud Function çağır (rejectQrToken)
       const rejectQrToken = httpsCallable(functions, "rejectQrToken");
-      await rejectQrToken({
-        txId,
-      });
-
-      console.log("✅ Cloud Function çağrıldı");
-      console.log("   Token status: rejected");
-      console.log("========================================");
+      await rejectQrToken({ txId });
     } catch (error) {
-      console.error("❌ Reddetme hatası:", error);
+      console.error(error);
       alert("Reddetme işlemi başarısız oldu");
     } finally {
       setIsProcessing(null);
@@ -298,415 +373,522 @@ export default function LoyaltyTab({
   };
 
   // ==========================================
-  // Otomatik Ödül Başlığı
-  // ==========================================
-  const automaticRewardGift = loyaltyForm.rewardBuy + 1;
-  const automaticRewardTitle =
-    loyaltyForm.rewardBuy > 0 && selectedItemType
-      ? `${loyaltyForm.rewardBuy} ${selectedItemType} siparişine, ${automaticRewardGift}. hediye`
-      : "";
-
-  // ==========================================
   // RENDER
   // ==========================================
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="space-y-6">
-        {/* Başarı/Hata Mesajı */}
-        {message && (
-          <div
-            className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
-              message.includes("✅")
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700"
-            }`}
-          >
-            {message}
-          </div>
-        )}
+    <>
+      {cropImage && (
+        <ImageCropper
+          image={cropImage}
+          aspect={1080 / 720}
+          onCropComplete={(_, croppedAreaPixels) =>
+            setCropArea(croppedAreaPixels)
+          }
+          onApply={applyCrop}
+          onCancel={() => {
+            setCropImage(null);
+            setCropArea(null);
+          }}
+        />
+      )}
 
-        {/* QR Oluşturma Hatası */}
-        {qrError && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            {qrError}
-          </div>
-        )}
-
-        {/* CafeId Eksikse Uyarı */}
-        {!cafeIdField && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
-            <p className="font-semibold text-red-700">
-              ⚠️ businessForm.cafeId Kontrol Gerekli
-            </p>
-            <p className="mt-2 text-sm text-red-600">
-              businessForm'da cafeId alanı bulunamadı. F12 → Console sekmesine bak.
-            </p>
-            <div className="mt-3 max-h-48 overflow-auto rounded bg-red-900 p-3 font-mono text-xs text-red-200">
-              <pre>{JSON.stringify(businessForm, null, 2)}</pre>
-            </div>
-          </div>
-        )}
-
-        {/* ========== PROGRAM AYARLARI ========== */}
-        <section className={`${shellCardClass()} overflow-hidden`}>
-          <SectionTitle
-            eyebrow="Program Ayarları"
-            title="Sadakat kart kuralları"
-            description="Kafe sahibi sadece item ve damga sayısını seçer, kalanı otomatik oluşur."
-          />
-          <div className="grid gap-5 p-6 md:grid-cols-2">
-            {/* İtem Türü Seç */}
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                İtem Türü Seç *
-              </label>
-              <select
-                value={selectedItemType}
-                onChange={(e) => setSelectedItemType(e.target.value)}
-                className={fieldClass()}
-              >
-                <option value="">-- İtem seçin (Kahve, Tatlı, vb.) --</option>
-                {itemTypes.map((item) => (
-                  <option key={item.id} value={item.name}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-              {selectedItemType && (
-                <p className="mt-2 text-xs text-emerald-600">
-                  ✓ Seçili: {selectedItemType}
-                </p>
-              )}
-            </div>
-
-            {/* Kaç siparişte ödül */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Kaç siparişte ödül? *
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={loyaltyForm.rewardBuy}
-                onChange={(e) =>
-                  updateLoyaltyField("rewardBuy", Number(e.target.value))
-                }
-                className={fieldClass()}
-              />
-              {loyaltyForm.rewardBuy > 0 && selectedItemType && (
-                <p className="mt-2 text-xs text-emerald-600">
-                  ✓ Ödül: {automaticRewardGift}. hediye
-                </p>
-              )}
-            </div>
-
-            {/* Günlük max damga */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Günlük max damga
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={loyaltyForm.maxDailyStamp}
-                onChange={(e) =>
-                  updateLoyaltyField("maxDailyStamp", Number(e.target.value))
-                }
-                className={fieldClass()}
-              />
-            </div>
-
-            {/* Kart geçerlilik */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Kart geçerlilik (gün)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={loyaltyForm.expiryDays}
-                onChange={(e) =>
-                  updateLoyaltyField("expiryDays", Number(e.target.value))
-                }
-                className={fieldClass()}
-              />
-            </div>
-
-            {/* Otomatik Başlık */}
-            {automaticRewardTitle && (
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Otomatik Başlık
-                </label>
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-sm font-semibold text-emerald-700">
-                    {automaticRewardTitle}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Kaydet Butonu */}
-          <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-            <button
-              onClick={onSave}
-              disabled={isSaving || !selectedItemType || loyaltyForm.rewardBuy <= 0}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="space-y-6">
+          {/* Mesaj */}
+          {message && (
+            <div
+              className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                message.includes("✅")
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
             >
-              {isSaving ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Kaydediliyor...
-                </>
-              ) : (
-                "💾 Kaydet"
-              )}
-            </button>
-            {!selectedItemType || loyaltyForm.rewardBuy <= 0 ? (
-              <p className="mt-2 text-xs text-slate-500">
-                Item türü ve damga sayısı seçmek zorunlu
-              </p>
-            ) : null}
-          </div>
-        </section>
+              {message}
+            </div>
+          )}
 
-        {/* ========== DAMGA QR KODU ========== */}
-        <section className={`${shellCardClass()} overflow-hidden`}>
-          <SectionTitle
-            eyebrow="Kasiyerin İşi"
-            title="Damga QR Kodu"
-            description="Müşteri bu QR'ı tarayarak damga alabilir."
-          />
-          <div className="p-6">
-            {/* QR Oluştur Butonu */}
-            <button
-              onClick={handleCreateQR}
-              disabled={isCreatingQR || !cafeIdField}
-              className="w-full rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isCreatingQR ? (
-                <>
-                  <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
-                  QR Oluşturuluyor...
-                </>
-              ) : (
-                "📱 QR Oluştur"
-              )}
-            </button>
+          {!cafeId && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              Kafe bilgileri yüklenemedi. Sayfayı yenileyiniz.
+            </div>
+          )}
 
-            {/* CafeId Eksikse Uyarı */}
-            {!cafeIdField && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-                <p className="text-sm font-semibold text-red-700">
-                  ⚠️ QR Oluşturulamıyor
-                </p>
-                <p className="mt-2 text-xs text-red-600">
-                  businessForm.cafeId eksik. Console'ı açıp kontrol et.
-                </p>
-              </div>
-            )}
-
-            {/* QR Göster */}
-            {qrValue && (
-              <div className="mt-6 flex flex-col items-center gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-6">
-                <p className="text-sm font-semibold text-slate-900">
-                  Müşteri bu QR'ı okutsun
-                </p>
-
-                <div className="rounded-2xl bg-white p-3 shadow-sm">
-                  <QRCode
-                    value={qrValue}
-                    size={200}
-                    level="H"
-                    includeMargin={true}
-                  />
-                </div>
-
-                <p className="text-xs text-slate-500">⏱️ QR kodu 2 dakika geçerlidir</p>
-
-                <div className="mt-4 w-full rounded-2xl border border-blue-200 bg-white p-3">
-                  <p className="text-xs font-mono text-slate-600">
-                    <strong>QR Data:</strong> {qrValue}
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setQrValue(null)}
-                  className="mt-4 rounded-2xl border border-blue-300 bg-white px-4 py-2 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
-                >
-                  ↻ Yeni QR Oluştur
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* ========== BEKLEYEN İŞLEMLER ========== */}
-        {pendingTokens.length > 0 && (
+          {/* ========== KART LİSTESİ ========== */}
           <section className={`${shellCardClass()} overflow-hidden`}>
-            <SectionTitle
-              eyebrow="Canlı İşlemler"
-              title="Bekleyen QR İşlemleri"
-              description={`${pendingTokens.length} müşteri tarafından QR tarandı, onay bekleniyor.`}
-            />
-            <div className="space-y-3 p-6">
-              {pendingTokens.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-amber-200 bg-amber-50 p-4"
+            <div className="flex items-start justify-between px-6 pt-6 pb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">
+                  Sadakat Kartları
+                </p>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Kart Programları
+                </h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Uygulamada sırasıyla gösterilir. Maksimum {MAX_CARDS} kart.
+                </p>
+              </div>
+              {!showForm && cards.length < MAX_CARDS && cafeId && (
+                <button
+                  onClick={openCreate}
+                  className="shrink-0 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
                 >
-                  <div className="mb-3 space-y-1">
-                    <p className="text-xs font-mono text-slate-600">
-                      <strong>Token ID:</strong> {item.id.slice(0, 12)}...
-                    </p>
-                    <p className="text-sm font-medium text-slate-900">
-                      👤 Kullanıcı:{" "}
-                      <span className="text-amber-700">
-                        {item.scannedUserId || "?"}
-                      </span>
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      ⏰ Tarama:{" "}
-                      {new Date(
-                        item.scannedAt?.toDate?.() || Date.now()
-                      ).toLocaleTimeString("tr-TR")}
-                    </p>
-                  </div>
+                  + Yeni Kart
+                </button>
+              )}
+            </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {/* Damga Ver Butonu */}
-                    <button
-                      onClick={() =>
-                        item.scannedUserId &&
-                        handleProcess(item.id, "stamp", item.scannedUserId)
-                      }
-                      disabled={isProcessing === item.id || !item.scannedUserId}
-                      className="inline-flex items-center gap-1 rounded-xl bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
-                    >
-                      {isProcessing === item.id ? (
-                        <>
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          İşleniyor...
-                        </>
-                      ) : (
-                        <>⭐ Damga Ver</>
-                      )}
-                    </button>
+            <div className="space-y-3 px-6 pb-6">
+              {cards.length === 0 && !showForm && (
+                <div className="rounded-2xl border-2 border-dashed border-slate-200 py-10 text-center">
+                  <p className="text-sm font-medium text-slate-400">
+                    Henüz sadakat kartı yok
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Yeni Kart butonuna basarak ekleyin
+                  </p>
+                </div>
+              )}
 
-                    {/* Ödül Kullan Butonu */}
-                    <button
-                      onClick={() =>
-                        item.scannedUserId &&
-                        handleProcess(item.id, "redeem", item.scannedUserId)
-                      }
-                      disabled={isProcessing === item.id || !item.scannedUserId}
-                      className="inline-flex items-center gap-1 rounded-xl bg-yellow-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-yellow-600 disabled:opacity-60"
-                    >
-                      {isProcessing === item.id ? (
-                        <>
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          İşleniyor...
-                        </>
-                      ) : (
-                        <>🎁 Ödül Kullan</>
-                      )}
-                    </button>
+              {cards.map((card, idx) => (
+                <div
+                  key={card.id}
+                  className={`rounded-2xl border p-4 ${
+                    editingId === card.id
+                      ? "border-emerald-300 bg-emerald-50"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Pozisyon rozeti */}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-lg font-bold text-emerald-700">
+                      {card.position}
+                    </div>
 
-                    {/* Reddet Butonu */}
-                    <button
-                      onClick={() => handleReject(item.id)}
-                      disabled={isProcessing === item.id}
-                      className="inline-flex items-center gap-1 rounded-xl border-2 border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-                    >
-                      {isProcessing === item.id ? (
-                        <>
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
-                          İşleniyor...
-                        </>
-                      ) : (
-                        <>❌ Reddet</>
+                    {/* Ürün görseli */}
+                    {card.productImageUrl ? (
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={card.productImageUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                        <span className="text-[10px] text-slate-400">
+                          Görsel
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Bilgiler */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {card.itemTypeId}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Her {card.rewardBuy}{" "}
+                        {card.itemTypeId.toLowerCase()}de 1 hediye
+                      </p>
+                      {card.programDescription && (
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">
+                          {card.programDescription}
+                        </p>
                       )}
-                    </button>
+                    </div>
+
+                    {/* Aksiyonlar */}
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => moveCard(card, "up")}
+                          disabled={idx === 0}
+                          title="Yukarı taşı"
+                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs text-slate-500 transition hover:bg-slate-50 disabled:opacity-30"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => moveCard(card, "down")}
+                          disabled={idx === cards.length - 1}
+                          title="Aşağı taşı"
+                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs text-slate-500 transition hover:bg-slate-50 disabled:opacity-30"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => openEdit(card)}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                      >
+                        Düzenle
+                      </button>
+                      <button
+                        onClick={() => handleDelete(card)}
+                        className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-500 transition hover:bg-red-50"
+                      >
+                        Sil
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
+
+              {cards.length >= MAX_CARDS && !showForm && (
+                <p className="pt-2 text-center text-xs text-slate-400">
+                  Maksimum {MAX_CARDS} kart limitine ulaşıldı.
+                </p>
+              )}
             </div>
           </section>
-        )}
 
-        {/* ========== PROGRAM DURUMU ========== */}
-        <section className={`${shellCardClass()} overflow-hidden`}>
-          <SectionTitle
-            eyebrow="Program Durumu"
-            title="Yayın kontrolü"
-            description="Henüz ayrı bir loyalty status alanı yoksa kafe aktifliğini baz alıyoruz."
-          />
-          <div className="p-6">
-            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  Sadakat programı aktif
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Şimdilik ayrı veri yoksa kafe aktifliğine bağlı gösterilir.
-                </p>
-              </div>
-              <Toggle
-                checked={loyaltyForm.programActive}
-                onChange={() =>
-                  updateLoyaltyField(
-                    "programActive",
-                    !loyaltyForm.programActive
-                  )
+          {/* ========== FORM (OLUŞTUR / DÜZENLE) ========== */}
+          {showForm && (
+            <section className={`${shellCardClass()} overflow-hidden`}>
+              <SectionTitle
+                eyebrow={editingId ? "Kart Düzenle" : "Yeni Kart Ekle"}
+                title={
+                  editingId
+                    ? "Kartı güncelle"
+                    : `${cards.length + 1}. kart ayarları`
                 }
+                description="Item türü ve damga sayısını belirleyin."
               />
-            </div>
-          </div>
-        </section>
-      </section>
-
-      {/* ========== SIDEBAR: KART ÖNİZLEME ========== */}
-      <aside>
-        <section className={`${shellCardClass()} sticky top-24 overflow-hidden`}>
-          <SectionTitle
-            eyebrow="Kart Önizleme"
-            title="Sadakat kart hissi"
-            description="Gerçek reward alanlarıyla dolan önizleme."
-          />
-          <div className="space-y-4 bg-slate-50 p-5">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-lg font-bold text-slate-900">
-                {businessForm.cafeName || "Kafe adı"}
-              </p>
-              <p className="mt-2 text-sm text-slate-500">
-                {automaticRewardTitle || previewText || "Henüz tanımlanmadı"}
-              </p>
-
-              <div className="mt-5 grid grid-cols-5 gap-2">
-                {Array.from({
-                  length: Math.max(loyaltyForm.rewardBuy, 5),
-                }).map((_, index) => (
-                  <div
-                    key={index}
-                    className={`flex aspect-square items-center justify-center rounded-2xl border text-sm font-bold ${
-                      index < Math.min(loyaltyForm.rewardBuy, 3)
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-slate-200 bg-slate-50 text-slate-400"
-                    }`}
+              <div className="grid gap-5 p-6 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Item Türü *
+                  </label>
+                  <select
+                    value={form.itemTypeId}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        itemTypeId: e.target.value,
+                      }))
+                    }
+                    className={fieldClass()}
                   >
-                    ☕
+                    <option value="">-- Item seçin --</option>
+                    {ITEM_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Kaç siparişte ödül? *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.rewardBuy}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        rewardBuy: Number(e.target.value),
+                      }))
+                    }
+                    className={fieldClass()}
+                  />
+                  {form.rewardBuy > 0 && form.itemTypeId && (
+                    <p className="mt-2 text-xs text-emerald-600">
+                      Ödül: {form.rewardBuy + 1}. hediye
+                    </p>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Ürün Görseli
+                  </label>
+                  <p className="mb-3 text-xs text-slate-400">
+                    Önerilen: 1080×720 px (3:2)
+                  </p>
+                  {form.productImagePreview && (
+                    <div className="mb-3 relative h-32 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={form.productImagePreview}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProductImageChange}
+                    className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-emerald-700"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Program Açıklaması
+                  </label>
+                  <textarea
+                    value={form.programDescription}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        programDescription: e.target.value,
+                      }))
+                    }
+                    rows={3}
+                    placeholder="Örn. Her 10 kahvede 1 bedava kahve kazanırsın!"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving || !form.itemTypeId || form.rewardBuy <= 0}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Kaydediliyor…
+                    </>
+                  ) : editingId ? (
+                    "Güncelle"
+                  ) : (
+                    "Kart Ekle"
+                  )}
+                </button>
+                <button
+                  onClick={cancelForm}
+                  className="rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  İptal
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* ========== DAMGA QR KODU ========== */}
+          <section className={`${shellCardClass()} overflow-hidden`}>
+            <SectionTitle
+              eyebrow="Kasiyerin İşi"
+              title="Damga QR Kodu"
+              description="Müşteri bu QR'ı tarayarak damga alabilir."
+            />
+            <div className="p-6">
+              <button
+                onClick={handleCreateQR}
+                disabled={isCreatingQR || !cafeId}
+                className="w-full rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isCreatingQR ? (
+                  <>
+                    <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
+                    QR Oluşturuluyor…
+                  </>
+                ) : (
+                  "📱 QR Oluştur"
+                )}
+              </button>
+
+              {qrError && (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {qrError}
+                </div>
+              )}
+
+              {qrValue && (
+                <div className="mt-6 flex flex-col items-center gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-6">
+                  <p className="text-sm font-semibold text-slate-900">
+                    Müşteri bu QR'ı okutsun
+                  </p>
+                  <div className="rounded-2xl bg-white p-3 shadow-sm">
+                    <QRCode
+                      value={qrValue}
+                      size={200}
+                      level="H"
+                      includeMargin={true}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    ⏱️ QR kodu 2 dakika geçerlidir
+                  </p>
+                  <button
+                    onClick={() => setQrValue(null)}
+                    className="mt-4 rounded-2xl border border-blue-300 bg-white px-4 py-2 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
+                  >
+                    ↻ Yeni QR Oluştur
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ========== BEKLEYEN İŞLEMLER ========== */}
+          {pendingTokens.length > 0 && (
+            <section className={`${shellCardClass()} overflow-hidden`}>
+              <SectionTitle
+                eyebrow="Canlı İşlemler"
+                title="Bekleyen QR İşlemleri"
+                description={`${pendingTokens.length} müşteri tarafından QR tarandı, onay bekleniyor.`}
+              />
+              <div className="space-y-3 p-6">
+                {pendingTokens.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-amber-200 bg-amber-50 p-4"
+                  >
+                    <div className="mb-3 space-y-1">
+                      <p className="text-xs font-mono text-slate-600">
+                        <strong>Token ID:</strong> {item.id.slice(0, 12)}…
+                      </p>
+                      <p className="text-sm font-medium text-slate-900">
+                        👤 Kullanıcı:{" "}
+                        <span className="text-amber-700">
+                          {item.scannedUserId || "?"}
+                        </span>
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        ⏰ Tarama:{" "}
+                        {new Date(
+                          item.scannedAt?.toDate?.() || Date.now()
+                        ).toLocaleTimeString("tr-TR")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() =>
+                          item.scannedUserId &&
+                          handleProcess(item.id, "stamp", item.scannedUserId)
+                        }
+                        disabled={
+                          isProcessing === item.id || !item.scannedUserId
+                        }
+                        className="inline-flex items-center gap-1 rounded-xl bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
+                      >
+                        {isProcessing === item.id ? (
+                          <>
+                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            İşleniyor…
+                          </>
+                        ) : (
+                          <>⭐ Damga Ver</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() =>
+                          item.scannedUserId &&
+                          handleProcess(item.id, "redeem", item.scannedUserId)
+                        }
+                        disabled={
+                          isProcessing === item.id || !item.scannedUserId
+                        }
+                        className="inline-flex items-center gap-1 rounded-xl bg-yellow-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-yellow-600 disabled:opacity-60"
+                      >
+                        {isProcessing === item.id ? (
+                          <>
+                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            İşleniyor…
+                          </>
+                        ) : (
+                          <>🎁 Ödül Kullan</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleReject(item.id)}
+                        disabled={isProcessing === item.id}
+                        className="inline-flex items-center gap-1 rounded-xl border-2 border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                      >
+                        {isProcessing === item.id ? (
+                          <>
+                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                            İşleniyor…
+                          </>
+                        ) : (
+                          <>❌ Reddet</>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
-
-              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
-                🎁 Tamamlanınca {automaticRewardGift} hediye ürün verilir
-              </div>
-            </div>
-          </div>
+            </section>
+          )}
         </section>
-      </aside>
-    </div>
+
+        {/* ========== SIDEBAR: ÖNİZLEME ========== */}
+        <aside>
+          <section
+            className={`${shellCardClass()} sticky top-24 overflow-hidden`}
+          >
+            <SectionTitle
+              eyebrow="Kart Önizleme"
+              title="Uygulamada sıralama"
+              description="Kartlar uygulamada bu sıraya göre listelenir."
+            />
+            <div className="space-y-3 bg-slate-50 p-5">
+              {[1, 2, 3].map((pos) => {
+                const card = cards.find((c) => c.position === pos);
+                return (
+                  <div
+                    key={pos}
+                    className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm"
+                  >
+                    <div className="flex items-stretch">
+                      <div className="flex h-20 w-12 shrink-0 items-center justify-center bg-emerald-50 text-lg font-bold text-emerald-600">
+                        {pos}
+                      </div>
+                      {card ? (
+                        <>
+                          <div className="h-20 w-20 shrink-0 overflow-hidden bg-slate-100">
+                            {card.productImageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={card.productImageUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-[10px] text-slate-400">
+                                Görsel yok
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 p-3">
+                            <p className="truncate text-sm font-bold text-slate-900">
+                              {businessForm.cafeName || "Kafe adı"}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {card.itemTypeId}
+                            </p>
+                            <div className="mt-2">
+                              <div className="h-1.5 w-full rounded-full bg-slate-100">
+                                <div className="h-1.5 w-0 rounded-full bg-emerald-500" />
+                              </div>
+                              <p className="mt-1 text-[10px] text-slate-400">
+                                0 / {card.rewardBuy} damga
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-1 items-center justify-center">
+                          <p className="text-xs text-slate-300">Boş slot</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+      </div>
+    </>
   );
 }

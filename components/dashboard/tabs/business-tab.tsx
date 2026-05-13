@@ -20,194 +20,56 @@ import { auth, db, storage } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import ImageCropper from "../ui/image-cropper";
 import getCroppedImg from "@/lib/cropImage";
+import CircularCropTool from "../ui/circular-crop-tool";
 
 import SectionTitle from "../ui/section-title";
 import Toggle from "../ui/toggle";
-import { fieldClass, shellCardClass } from "../helpers";
+import { shellCardClass } from "../helpers";
 
 // ─────────────────────────────────────────────
-// Circular Crop Component
-// ─────────────────────────────────────────────
-
-interface CircularCropToolProps {
-  src: string;
-  onCropComplete: (croppedImageData: string) => void;
-  onCancel: () => void;
-}
-
-function CircularCropTool({ src, onCropComplete, onCancel }: CircularCropToolProps) {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const imageRef = React.useRef<HTMLImageElement>(null);
-  const [scale, setScale] = useState(1);
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
-
-  useEffect(() => {
-    const img = imageRef.current;
-    if (!img) return;
-
-    img.onload = () => {
-      setOffsetX(0);
-      setOffsetY(0);
-      setScale(1);
-    };
-  }, [src]);
-
-  function handleCrop() {
-    const canvas = canvasRef.current;
-    const img = imageRef.current;
-    if (!canvas || !img) return;
-
-    const size = 300;
-    canvas.width = size;
-    canvas.height = size;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Draw circular mask
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-    ctx.clip();
-
-    // Draw scaled image
-    const scaledWidth = img.width * scale;
-    const scaledHeight = img.height * scale;
-    const x = (size - scaledWidth) / 2 + offsetX;
-    const y = (size - scaledHeight) / 2 + offsetY;
-
-    ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          onCropComplete(e.target?.result as string);
-        };
-        reader.readAsDataURL(blob);
-      }
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-        <h3 className="mb-4 text-lg font-bold text-slate-900">Logoyu Kırp (Yuvarlak)</h3>
-
-        <div className="relative mb-4 flex justify-center">
-          <div className="relative h-80 w-80 overflow-hidden rounded-full border-4 border-emerald-500 bg-slate-100">
-            <img
-              ref={imageRef}
-              src={src}
-              alt="Logo"
-              className="h-full w-full object-cover"
-              style={{
-                transform: `scale(${scale}) translate(${offsetX}px, ${offsetY}px)`,
-                transformOrigin: "center",
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="mb-2 block text-sm font-semibold text-slate-700">Zoom</label>
-          <input
-            type="range"
-            min="0.5"
-            max="3"
-            step="0.1"
-            value={scale}
-            onChange={(e) => setScale(Number(e.target.value))}
-            className="w-full"
-          />
-          <p className="mt-1 text-xs text-slate-500">{scale.toFixed(1)}x</p>
-        </div>
-
-        <div className="mb-4 flex gap-2">
-          <div className="flex-1">
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Sağ/Sol</label>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              step="5"
-              value={offsetX}
-              onChange={(e) => setOffsetX(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Yukarı/Aşağı</label>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              step="5"
-              value={offsetY}
-              onChange={(e) => setOffsetY(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={onCancel}
-            className="flex-1 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 font-semibold text-slate-900 transition hover:bg-slate-200"
-          >
-            İptal
-          </button>
-          <button
-            onClick={handleCrop}
-            className="flex-1 rounded-2xl bg-emerald-500 px-4 py-3 font-semibold text-white transition hover:bg-emerald-600"
-          >
-            Onayla ✓
-          </button>
-        </div>
-
-        <canvas ref={canvasRef} className="hidden" />
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-// Types
+// Types & Constants
 // ─────────────────────────────────────────────
 
 type BusinessForm = {
   cafeId: string;
   cafeName: string;
   category: string;
-  phone: string;
   address: string;
   location: string;
-  openTime: string;
-  closeTime: string;
   logoUrl: string;
-  description: string;
   isOpen: boolean;
   isVisible: boolean;
   approvalStatus: string;
+  instagramUrl: string;
+  menuUrl: string;
 };
 
 const emptyForm: BusinessForm = {
   cafeId: "",
   cafeName: "",
   category: "",
-  phone: "",
   address: "",
   location: "",
-  openTime: "",
-  closeTime: "",
   logoUrl: "",
-  description: "",
   isOpen: false,
   isVisible: false,
   approvalStatus: "",
+  instagramUrl: "",
+  menuUrl: "",
 };
 
-// ✅ Features list
+const CATEGORIES = [
+  "Kahvehane",
+  "Kafe",
+  "Fast Food",
+  "Restoran",
+  "Pastane & Fırın",
+  "Dondurma",
+  "Büfe",
+  "Bar & Pub",
+  "Diğer",
+];
+
 const FEATURE_LIST = [
   { key: "wifi", label: "WiFi", icon: "📶" },
   { key: "garden", label: "Bahçe", icon: "🌳" },
@@ -217,14 +79,32 @@ const FEATURE_LIST = [
   { key: "parking", label: "Otopark", icon: "🅿️" },
 ];
 
-// ✅ Cards list (payment cards)
 const CARD_LIST = [
-  { key: "edenred", label: "Edenred" },
+  { key: "nakit", label: "Nakit" },
+  { key: "banka_kredi", label: "Banka & Kredi Kartı" },
   { key: "multinet", label: "Multinet" },
   { key: "pluxee", label: "Pluxee" },
+  { key: "edenred", label: "Edenred Ticket" },
   { key: "setcard", label: "Setcard" },
-  { key: "metropol", label: "MetropolCard" },
+  { key: "metropol", label: "Metropol" },
+  { key: "tokenflex", label: "TokenFlex" },
 ];
+
+type WorkingDay = { isOpen: boolean; openTime: string; closeTime: string };
+type WorkingHours = Record<string, WorkingDay>;
+
+const DAYS = [
+  { key: "mon", label: "Pazartesi" },
+  { key: "tue", label: "Salı" },
+  { key: "wed", label: "Çarşamba" },
+  { key: "thu", label: "Perşembe" },
+  { key: "fri", label: "Cuma" },
+  { key: "sat", label: "Cumartesi" },
+  { key: "sun", label: "Pazar" },
+];
+
+const defaultWorkingHours = (): WorkingHours =>
+  Object.fromEntries(DAYS.map((d) => [d.key, { isOpen: true, openTime: "09:00", closeTime: "22:00" }]));
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -246,11 +126,9 @@ function inputClass() {
   return "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
 }
 
-function isStoryExpired(uploadedAt: unknown): boolean {
+function isUploadedToday(uploadedAt: unknown): boolean {
   if (!uploadedAt) return false;
-  
   let uploadTime: number;
-  
   if (uploadedAt instanceof Timestamp) {
     uploadTime = uploadedAt.toMillis();
   } else if (typeof uploadedAt === "number") {
@@ -258,11 +136,26 @@ function isStoryExpired(uploadedAt: unknown): boolean {
   } else {
     return false;
   }
-  
-  const now = Date.now();
-  const expiredMs = 24 * 60 * 60 * 1000;
-  
-  return now - uploadTime > expiredMs;
+  const now = new Date();
+  const uploaded = new Date(uploadTime);
+  return (
+    now.getFullYear() === uploaded.getFullYear() &&
+    now.getMonth() === uploaded.getMonth() &&
+    now.getDate() === uploaded.getDate()
+  );
+}
+
+function isStoryExpired(uploadedAt: unknown): boolean {
+  if (!uploadedAt) return false;
+  let uploadTime: number;
+  if (uploadedAt instanceof Timestamp) {
+    uploadTime = uploadedAt.toMillis();
+  } else if (typeof uploadedAt === "number") {
+    uploadTime = uploadedAt;
+  } else {
+    return false;
+  }
+  return Date.now() - uploadTime > 24 * 60 * 60 * 1000;
 }
 
 // ─────────────────────────────────────────────
@@ -277,7 +170,7 @@ export default function BusinessTab() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState("");
-  
+
   // Story State
   const [storyFile, setStoryFile] = useState<File | null>(null);
   const [storyPreview, setStoryPreview] = useState("");
@@ -297,42 +190,49 @@ export default function BusinessTab() {
   const [menuFiles, setMenuFiles] = useState<File[]>([]);
   const [menuUploading, setMenuUploading] = useState(false);
   const [menuImages, setMenuImages] = useState<string[]>([]);
+  const [removedMenuUrls, setRemovedMenuUrls] = useState<string[]>([]);
 
-  // ✅ Features State
+  // Features & Cards State
   const [features, setFeatures] = useState<string[]>([]);
   const [savedFeaturesState, setSavedFeaturesState] = useState<string[]>([]);
-
-  // ✅ Cards State
   const [cards, setCards] = useState<string[]>([]);
   const [savedCardsState, setSavedCardsState] = useState<string[]>([]);
-  
+
+  // Working Hours State
+  const [workingHours, setWorkingHours] = useState<WorkingHours>(defaultWorkingHours());
+  const [savedWorkingHours, setSavedWorkingHours] = useState<WorkingHours>(defaultWorkingHours());
+
   // Crop State
   const [cropImage, setCropImage] = useState<string | null>(null);
   const [cropArea, setCropArea] = useState<any>(null);
-  const [cropType, setCropType] = useState<"logo" | "story" | "hero" | null>(null);
-  
+  const [cropType, setCropType] = useState<"story" | "hero" | null>(null);
+
   // Circular Crop State
   const [showCircularCrop, setShowCircularCrop] = useState(false);
   const [circularCropImage, setCircularCropImage] = useState("");
-  
+
   const [message, setMessage] = useState("");
   const [errorText, setErrorText] = useState("");
 
-  // ✅ Features değişip değişmediğini kontrol et
   const featuresChanged = JSON.stringify(features) !== JSON.stringify(savedFeaturesState);
-
-  // ✅ Cards değişip değişmediğini kontrol et
   const cardsChanged = JSON.stringify(cards) !== JSON.stringify(savedCardsState);
+  const workingHoursChanged = JSON.stringify(workingHours) !== JSON.stringify(savedWorkingHours);
 
-  // Değişiklik var mı?
   const hasChanges =
     logoFile !== null ||
     storyFile !== null ||
     heroImageFile !== null ||
     menuFiles.length > 0 ||
+    removedMenuUrls.length > 0 ||
     JSON.stringify(form) !== JSON.stringify(savedForm) ||
     featuresChanged ||
-    cardsChanged;
+    cardsChanged ||
+    workingHoursChanged;
+
+  // Today's working hours for preview
+  const DAY_KEYS_SUN_FIRST = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const todayKey = DAY_KEYS_SUN_FIRST[new Date().getDay()];
+  const todayHours = workingHours[todayKey];
 
   // ── Firestore'dan veri çek ──
   useEffect(() => {
@@ -359,77 +259,86 @@ export default function BusinessTab() {
           cafeId: cafeDoc.id,
           cafeName: String(d?.name ?? ""),
           category: String(d?.category ?? ""),
-          phone: String(d?.phone ?? ""),
           address: String(d?.address ?? ""),
           location: formatLocationValue(d?.location ?? d?.locationText ?? ""),
-          openTime: String(d?.openTime ?? ""),
-          closeTime: String(d?.closeTime ?? ""),
-          logoUrl: String(d?.logoUrl ?? d?.logoValue ?? ""),
-          description: String(d?.description ?? ""),
+          logoUrl: String(d?.logoUrl ?? ""),
           isOpen: Boolean(d?.isActive ?? d?.isOpen ?? false),
           isVisible: Boolean(d?.isVisible ?? false),
           approvalStatus: String(d?.approvalStatus ?? ""),
+          instagramUrl: String(d?.instagramUrl ?? ""),
+          menuUrl: String(d?.menuUrl ?? ""),
         };
 
         setForm(loaded);
         setSavedForm(loaded);
         setLogoPreview(loaded.logoUrl);
 
-        // Story verilerini "stories" koleksiyonundan çek
+        // Story verilerini yükle
         try {
-          const storyQuery = query(
-            collection(db, "stories"),
-            where("cafeId", "==", cafeDoc.id)
+          const storySnap = await getDocs(
+            query(collection(db, "stories"), where("cafeId", "==", cafeDoc.id))
           );
-          const storySnap = await getDocs(storyQuery);
+
+          // Kafe dokümanındaki lastStoryUploadedAt her zaman limit için kullanılır
+          const cafeLastUpload = d?.lastStoryUploadedAt ?? null;
 
           if (!storySnap.empty) {
             const storyDoc = storySnap.docs[0];
             const storyData = storyDoc.data();
-            
             const loadedStoryUrl = String(storyData?.storyUrl ?? "");
-            const loadedStoryUploadedAt = storyData?.uploadedAt ?? null;
-            
+            const loadedStoryUploadedAt = storyData?.uploadedAt ?? cafeLastUpload;
             setStoryId(storyDoc.id);
             setStoryUrl(loadedStoryUrl);
             setStoryUploadedAt(loadedStoryUploadedAt);
             setStoryPreview(loadedStoryUrl);
-            
             if (loadedStoryUrl && isStoryExpired(loadedStoryUploadedAt)) {
               setStoryExpired(true);
             }
+          } else {
+            // Story dokümanı yok ama bugün yüklediyse limiti koru
+            setStoryUploadedAt(cafeLastUpload);
           }
         } catch (err) {
           console.error("Story fetch error:", err);
         }
 
-        // Hero Image verilerini yükle
+        // Hero Image
         const loadedHeroImageUrl = String(d?.heroImage ?? "");
         setHeroImageUrl(loadedHeroImageUrl);
         setHeroImagePreview(loadedHeroImageUrl);
 
-        // Menu Images verilerini yükle
-        const loadedMenuImages = Array.isArray(d?.menuImages)
-          ? d.menuImages
-          : [];
-        
+        // Menu Images
+        const loadedMenuImages = Array.isArray(d?.menuImages) ? d.menuImages : [];
         setMenuImages(loadedMenuImages);
 
-        // ✅ Features verilerini yükle
-        const loadedFeatures = Array.isArray(d?.features)
-          ? d.features
-          : [];
-        
+        // Features
+        const loadedFeatures = Array.isArray(d?.features) ? d.features : [];
         setFeatures(loadedFeatures);
         setSavedFeaturesState(loadedFeatures);
 
-        // ✅ Cards verilerini yükle
-        const loadedCards = Array.isArray(d?.cards)
-          ? d.cards
-          : [];
-        
+        // Cards
+        const loadedCards = Array.isArray(d?.cards) ? d.cards : [];
         setCards(loadedCards);
         setSavedCardsState(loadedCards);
+
+        // Working Hours
+        const raw = d?.workingHours;
+        const loadedHours: WorkingHours = defaultWorkingHours();
+        if (raw && typeof raw === "object") {
+          DAYS.forEach(({ key }) => {
+            const day = (raw as Record<string, unknown>)[key];
+            if (day && typeof day === "object") {
+              const dh = day as Record<string, unknown>;
+              loadedHours[key] = {
+                isOpen: typeof dh.isOpen === "boolean" ? dh.isOpen : true,
+                openTime: typeof dh.openTime === "string" ? dh.openTime : "09:00",
+                closeTime: typeof dh.closeTime === "string" ? dh.closeTime : "22:00",
+              };
+            }
+          });
+        }
+        setWorkingHours(loadedHours);
+        setSavedWorkingHours(JSON.parse(JSON.stringify(loadedHours)));
       } catch (err) {
         console.error("BusinessTab load error:", err);
         setErrorText("Veriler yüklenirken hata oluştu.");
@@ -456,25 +365,18 @@ export default function BusinessTab() {
     setErrorText("");
   }
 
-  // ✅ Feature toggle
   const toggleFeature = (key: string) => {
     setFeatures((prev) =>
-      prev.includes(key)
-        ? prev.filter((f) => f !== key)
-        : [...prev, key]
+      prev.includes(key) ? prev.filter((f) => f !== key) : [...prev, key]
     );
   };
 
-  // ✅ Card toggle
   const toggleCard = (key: string) => {
     setCards((prev) =>
-      prev.includes(key)
-        ? prev.filter((c) => c !== key)
-        : [...prev, key]
+      prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key]
     );
   };
 
-  // Circular Crop Complete Handler
   function handleCircularCropComplete(croppedImageData: string) {
     fetch(croppedImageData)
       .then((res) => res.blob())
@@ -486,13 +388,9 @@ export default function BusinessTab() {
         setCircularCropImage("");
         setMessage("✅ Logo kırpıldı. Kaydet butonuna basınca yüklenir.");
       })
-      .catch((err) => {
-        console.error("Crop error:", err);
-        setErrorText("❌ Logo kırpma hatası.");
-      });
+      .catch(() => setErrorText("❌ Logo kırpma hatası."));
   }
 
-  // Logo change handler
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     if (!file) return;
@@ -500,7 +398,6 @@ export default function BusinessTab() {
       setErrorText("Logo: Geçerli bir görsel dosyası seç.");
       return;
     }
-
     const reader = new FileReader();
     reader.onload = (e) => {
       setCircularCropImage(e.target?.result as string);
@@ -521,9 +418,7 @@ export default function BusinessTab() {
       return;
     }
     if (storyPreview.startsWith("blob:")) URL.revokeObjectURL(storyPreview);
-    
-    const url = URL.createObjectURL(file);
-    setCropImage(url);
+    setCropImage(URL.createObjectURL(file));
     setCropType("story");
     setMessage("");
     setErrorText("");
@@ -531,24 +426,17 @@ export default function BusinessTab() {
 
   async function handleStoryRemove() {
     if (!storyUrl || !form.cafeId || !storyId) return;
-
     setMessage("");
     setErrorText("");
-
     try {
-      // Storage'dan sil
-      const storageRef = ref(storage, storyUrl);
-      await deleteObject(storageRef).catch(() => {});
-
-      // Firestore'dan sil (stories koleksiyonundan)
+      await deleteObject(ref(storage, storyUrl)).catch(() => {});
       await deleteDoc(doc(db, "stories", storyId));
-
       setStoryUrl("");
-      setStoryUploadedAt(null);
       setStoryPreview("");
       setStoryFile(null);
       setStoryId(null);
       setStoryExpired(false);
+      // storyUploadedAt intentionally kept so daily limit remains enforced
       setMessage("✅ Story başarıyla silindi.");
     } catch (err) {
       console.error("Story delete error:", err);
@@ -568,9 +456,7 @@ export default function BusinessTab() {
       return;
     }
     if (heroImagePreview.startsWith("blob:")) URL.revokeObjectURL(heroImagePreview);
-    
-    const url = URL.createObjectURL(file);
-    setCropImage(url);
+    setCropImage(URL.createObjectURL(file));
     setCropType("hero");
     setMessage("");
     setErrorText("");
@@ -578,19 +464,14 @@ export default function BusinessTab() {
 
   async function handleHeroImageRemove() {
     if (!heroImageUrl || !form.cafeId) return;
-
     setMessage("");
     setErrorText("");
-
     try {
-      const storageRef = ref(storage, heroImageUrl);
-      await deleteObject(storageRef).catch(() => {});
-
+      await deleteObject(ref(storage, heroImageUrl)).catch(() => {});
       await updateDoc(doc(db, "cafes", form.cafeId), {
         heroImage: null,
         updatedAt: serverTimestamp(),
       });
-
       setHeroImageUrl("");
       setHeroImagePreview("");
       setHeroImageFile(null);
@@ -601,18 +482,14 @@ export default function BusinessTab() {
     }
   }
 
-  // Menu images handler
   function handleMenuChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-
     if (files.length === 0) return;
 
-    // Max 8 fotoğraf
-    if (menuImages.length + menuFiles.length + files.length > 8) {
-      setErrorText("En fazla 8 menü fotoğrafı yükleyebilirsin.");
+    if (menuImages.length + menuFiles.length + files.length > 5) {
+      setErrorText("En fazla 5 menü fotoğrafı yükleyebilirsin.");
       return;
     }
-
     for (const file of files) {
       if (!file.type.startsWith("image/")) {
         setErrorText("Sadece görsel dosyaları seçebilirsin.");
@@ -623,26 +500,21 @@ export default function BusinessTab() {
         return;
       }
     }
-
     setMenuFiles((prev) => [...prev, ...files]);
     setMessage(`✅ ${files.length} fotoğraf seçildi.`);
   }
 
-  // Menu images remove handler
   function handleMenuImageRemove(index: number) {
+    const url = menuImages[index];
+    if (url) setRemovedMenuUrls((prev) => [...prev, url]);
     setMenuImages((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function applyCrop() {
     if (!cropImage || !cropArea) return;
-
     try {
       const blob = await getCroppedImg(cropImage, cropArea);
-
-      if (!blob) {
-        setErrorText("❌ Görsel kırpma hatası.");
-        return;
-      }
+      if (!blob) { setErrorText("❌ Görsel kırpma hatası."); return; }
 
       const file = new File([blob], "cropped.jpg", { type: "image/jpeg" });
       const preview = URL.createObjectURL(file);
@@ -651,7 +523,6 @@ export default function BusinessTab() {
         setStoryFile(file);
         setStoryPreview(preview);
       }
-
       if (cropType === "hero") {
         setHeroImageFile(file);
         setHeroImagePreview(preview);
@@ -685,10 +556,7 @@ export default function BusinessTab() {
         setLogoUploading(true);
         try {
           const ext = logoFile.name.split(".").pop()?.toLowerCase() || "png";
-          const storageRef = ref(
-            storage,
-            `cafes/${form.cafeId}/logo_${Date.now()}.${ext}`
-          );
+          const storageRef = ref(storage, `cafes/${form.cafeId}/logo_${Date.now()}.${ext}`);
           await uploadBytes(storageRef, logoFile, { contentType: logoFile.type });
           nextLogoUrl = await getDownloadURL(storageRef);
         } finally {
@@ -696,42 +564,40 @@ export default function BusinessTab() {
         }
       }
 
-      // 🔥 Story yükleme - STORIES KOLEKSİYONUNA YAZ
+      // Story yükleme
       if (storyFile) {
+        if (storyUploadedAt && isUploadedToday(storyUploadedAt)) {
+          setSaving(false);
+          setErrorText("❌ Bugün zaten bir story yüklediniz. Yeni story yarın yükleyebilirsiniz.");
+          return;
+        }
         setStoryUploading(true);
         try {
           const ext = storyFile.name.split(".").pop()?.toLowerCase() || "jpg";
-          const storageRef = ref(
-            storage,
-            `stories/${form.cafeId}/${Date.now()}.${ext}`
-          );
-
-          await uploadBytes(storageRef, storyFile, {
-            contentType: storyFile.type,
-          });
-
+          const storageRef = ref(storage, `stories/${form.cafeId}/${Date.now()}.${ext}`);
+          await uploadBytes(storageRef, storyFile, { contentType: storyFile.type });
           const url = await getDownloadURL(storageRef);
 
-          // Eski story varsa sil
           if (storyId) {
-            try {
-              await deleteDoc(doc(db, "stories", storyId));
-            } catch (err) {
-              console.error("Old story delete error:", err);
-            }
+            await deleteDoc(doc(db, "stories", storyId)).catch(() => {});
           }
 
-          // Yeni story'yi "stories" koleksiyonuna ekle
+          const now = Timestamp.now();
           const storyDocRef = await addDoc(collection(db, "stories"), {
             cafeId: form.cafeId,
             cafeName: form.cafeName,
             logoUrl: nextLogoUrl,
             storyUrl: url,
-            uploadedAt: Timestamp.now(),
+            uploadedAt: now,
+          });
+
+          await updateDoc(doc(db, "cafes", form.cafeId), {
+            lastStoryUploadedAt: now,
           });
 
           nextStoryUrl = url;
           setStoryId(storyDocRef.id);
+          setStoryUploadedAt(now);
         } finally {
           setStoryUploading(false);
         }
@@ -742,10 +608,7 @@ export default function BusinessTab() {
         setHeroImageUploading(true);
         try {
           const ext = heroImageFile.name.split(".").pop()?.toLowerCase() || "jpg";
-          const storageRef = ref(
-            storage,
-            `cafes/${form.cafeId}/hero_image_${Date.now()}.${ext}`
-          );
+          const storageRef = ref(storage, `cafes/${form.cafeId}/hero_image_${Date.now()}.${ext}`);
           await uploadBytes(storageRef, heroImageFile, { contentType: heroImageFile.type });
           nextHeroImageUrl = await getDownloadURL(storageRef);
         } finally {
@@ -753,7 +616,12 @@ export default function BusinessTab() {
         }
       }
 
-      // Menu images yükleme
+      // Silinen menü görsellerini Storage'dan temizle
+      for (const url of removedMenuUrls) {
+        await deleteObject(ref(storage, url)).catch(() => {});
+      }
+
+      // Menü görseli yükleme
       if (menuFiles.length > 0) {
         setMenuUploading(true);
         try {
@@ -761,56 +629,47 @@ export default function BusinessTab() {
             const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
             const storageRef = ref(
               storage,
-              `cafes/${form.cafeId}/menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`
+              `cafes/${form.cafeId}/menu_${Date.now()}_${Math.random().toString(36).slice(2, 11)}.${ext}`
             );
-
             await uploadBytes(storageRef, file, { contentType: file.type });
-            const url = await getDownloadURL(storageRef);
-
-            nextMenuImages.push(url);
+            nextMenuImages.push(await getDownloadURL(storageRef));
           }
         } finally {
           setMenuUploading(false);
         }
       }
 
-      // Location string'ini GeoPoint'e çevir
+      // Konum GeoPoint'e çevir
       let geoPoint = null;
       if (form.location.trim()) {
         try {
-          const parts = form.location.trim().split(',');
+          const parts = form.location.trim().split(",");
           if (parts.length === 2) {
             const lat = parseFloat(parts[0].trim());
             const lng = parseFloat(parts[1].trim());
-            if (!isNaN(lat) && !isNaN(lng)) {
-              geoPoint = new GeoPoint(lat, lng);
-            }
+            if (!isNaN(lat) && !isNaN(lng)) geoPoint = new GeoPoint(lat, lng);
           }
         } catch (e) {
-          console.warn('Location parse hatası:', e);
+          console.warn("Location parse hatası:", e);
         }
       }
 
-      // CAFES koleksiyonunu güncelle (story HARICINDE)
       await updateDoc(doc(db, "cafes", form.cafeId), {
         name: form.cafeName.trim(),
         category: form.category.trim(),
-        phone: form.phone.trim(),
         address: form.address.trim(),
         location: geoPoint,
         locationText: form.location.trim(),
-        openTime: form.openTime,
-        closeTime: form.closeTime,
-        description: form.description.trim(),
         isActive: form.isOpen,
         isVisible: form.isVisible,
         logoUrl: nextLogoUrl,
-        logoValue: nextLogoUrl,
-        logoType: nextLogoUrl ? "network" : "",
         heroImage: nextHeroImageUrl,
         menuImages: nextMenuImages,
         features: features,
         cards: cards,
+        workingHours: workingHours,
+        instagramUrl: form.instagramUrl.trim(),
+        menuUrl: form.menuUrl.trim(),
         updatedAt: serverTimestamp(),
       });
 
@@ -818,10 +677,8 @@ export default function BusinessTab() {
         ...form,
         cafeName: form.cafeName.trim(),
         category: form.category.trim(),
-        phone: form.phone.trim(),
         address: form.address.trim(),
         location: form.location.trim(),
-        description: form.description.trim(),
         logoUrl: nextLogoUrl,
       };
 
@@ -829,7 +686,7 @@ export default function BusinessTab() {
       setSavedForm(updated);
       setLogoPreview(nextLogoUrl);
       setLogoFile(null);
-      
+
       setStoryUrl(nextStoryUrl);
       setStoryPreview(nextStoryUrl);
       setStoryFile(null);
@@ -841,10 +698,12 @@ export default function BusinessTab() {
 
       setMenuImages(nextMenuImages);
       setMenuFiles([]);
-      
+      setRemovedMenuUrls([]);
+
       setSavedFeaturesState(features);
       setSavedCardsState(cards);
-      
+      setSavedWorkingHours(JSON.parse(JSON.stringify(workingHours)));
+
       setMessage("✅ Tüm değişiklikler başarıyla kaydedildi.");
     } catch (err) {
       console.error("BusinessTab save error:", err);
@@ -876,11 +735,6 @@ export default function BusinessTab() {
       </div>
     );
   }
-
-  const previewText =
-    form.cafeName ||
-    form.category ||
-    "Kafe bilgisi henüz girilmedi";
 
   return (
     <div className="space-y-4">
@@ -960,8 +814,8 @@ export default function BusinessTab() {
 
               {/* Story */}
               <div className="rounded-3xl border border-amber-200 bg-amber-50/80 p-5">
-                <p className="mb-1 text-sm font-semibold text-slate-900">📱 Kafe Story'si (Instagram Mantığı)</p>
-                <p className="mb-4 text-xs text-slate-500">PNG veya JPG formatında. 24 saat sonra otomatik silinir.</p>
+                <p className="mb-1 text-sm font-semibold text-slate-900">📱 Kafe Story&apos;si</p>
+                <p className="mb-4 text-xs text-slate-500">PNG veya JPG. 24 saat sonra otomatik silinir. Günlük 1 story yükleyebilirsiniz.</p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
                     {storyPreview ? (
@@ -972,28 +826,10 @@ export default function BusinessTab() {
                     )}
                   </div>
                   <div className="flex-1">
-                    {storyUrl && !storyExpired ? (
-                      <div className="space-y-2">
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                          <p className="text-xs font-semibold text-emerald-700">
-                            ✓ Story aktif (24 saat içinde otomatik silinecek)
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleStoryRemove}
-                          disabled={storyUploading || saving}
-                          className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          🗑️ Story'yi Sil
-                        </button>
-                      </div>
-                    ) : storyUrl && storyExpired ? (
+                    {storyUrl && storyExpired ? (
                       <div className="space-y-2">
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-xs font-semibold text-slate-600">
-                            ⏰ Story süresi dolmuş (sil ve yenisini yükle)
-                          </p>
+                          <p className="text-xs font-semibold text-slate-600">⏰ Story süresi dolmuş — sil ve yenisini yükle</p>
                         </div>
                         <button
                           type="button"
@@ -1001,8 +837,28 @@ export default function BusinessTab() {
                           disabled={storyUploading || saving}
                           className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          🗑️ Eski Story'yi Sil
+                          🗑️ Eski Story&apos;yi Sil
                         </button>
+                      </div>
+                    ) : storyUrl && !storyExpired ? (
+                      <div className="space-y-2">
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                          <p className="text-xs font-semibold text-emerald-700">✓ Story aktif (24 saat içinde otomatik silinecek)</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleStoryRemove}
+                          disabled={storyUploading || saving}
+                          className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          🗑️ Story&apos;yi Sil
+                        </button>
+                      </div>
+                    ) : isUploadedToday(storyUploadedAt) ? (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2">
+                        <p className="text-xs font-semibold text-amber-700">
+                          ⏳ Bugün zaten bir story yüklediniz. Yarın yeni story ekleyebilirsiniz.
+                        </p>
                       </div>
                     ) : (
                       <div>
@@ -1031,8 +887,8 @@ export default function BusinessTab() {
 
               {/* Hero Image */}
               <div className="rounded-3xl border border-cyan-200 bg-cyan-50/80 p-5">
-                <p className="mb-1 text-sm font-semibold text-slate-900">🖼️ Kafe Detay Sayfası Görseli (Hero Image)</p>
-                <p className="mb-4 text-xs text-slate-500">PNG veya JPG formatında. Detay sayfasının üst kısmında gösterilir. Kalıcıdır.</p>
+                <p className="mb-1 text-sm font-semibold text-slate-900">🖼️ Detay Sayfası Görseli (Hero Image)</p>
+                <p className="mb-4 text-xs text-slate-500">PNG veya JPG. Önerilen: 1080×720 px (3:2). Konu tam ortada olmalı — kenarlar kırpılır. Kafe detay sayfasının üst kısmında gösterilir.</p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-cyan-200 bg-white shadow-sm">
                     {heroImagePreview ? (
@@ -1042,104 +898,116 @@ export default function BusinessTab() {
                       <span className="text-xs font-medium text-slate-400">Görsel yok</span>
                     )}
                   </div>
-                  <div className="flex-1">
-                    {heroImageUrl ? (
-                      <div className="space-y-2">
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                          <p className="text-xs font-semibold text-emerald-700">
-                            ✓ Hero Image yüklendi
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleHeroImageRemove}
-                          disabled={heroImageUploading || saving}
-                          className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          🗑️ Görseli Sil
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleHeroImageChange}
-                          className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-cyan-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-cyan-700"
-                        />
-                        <p className="mt-2 text-xs text-slate-500">
-                          {heroImageFile
-                            ? `Seçilen: ${heroImageFile.name} — Kaydet butonuna bas.`
-                            : "Görsel seçin, kaydet butonuna basınca yüklenir."}
-                        </p>
-                        {heroImageUploading && (
-                          <div className="mt-2 flex items-center gap-2 text-xs font-medium text-cyan-700">
-                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
-                            Hero Image yükleniyor...
-                          </div>
-                        )}
+                  <div className="flex-1 space-y-2">
+                    {heroImageUrl && (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <p className="text-xs font-semibold text-emerald-700">✓ Hero Image yüklendi</p>
                       </div>
                     )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Menu Images */}
-              <div className="rounded-3xl border border-purple-200 bg-purple-50/80 p-5">
-                <p className="mb-1 text-sm font-semibold text-slate-900">📋 Menü Fotoğrafları</p>
-                <p className="mb-4 text-xs text-slate-500">Maksimum 8 fotoğraf. Kullanıcılar menüye tıklayınca görecek.</p>
-                <div className="space-y-4">
-                  <div>
                     <input
                       type="file"
                       accept="image/*"
-                      multiple
-                      onChange={handleMenuChange}
-                      disabled={menuImages.length + menuFiles.length >= 8}
-                      className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-purple-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-purple-700 disabled:opacity-50"
+                      onChange={handleHeroImageChange}
+                      className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-cyan-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-cyan-700"
                     />
-                    <p className="mt-2 text-xs text-slate-500">
-                      {menuFiles.length > 0
-                        ? `${menuFiles.length} fotoğraf seçildi (${menuImages.length} zaten yüklü)`
-                        : `Fotoğraf seç → Kaydet'e bas (${menuImages.length}/8 yüklü)`}
+                    <p className="text-xs text-slate-500">
+                      {heroImageFile
+                        ? `Seçilen: ${heroImageFile.name} — Kaydet butonuna bas.`
+                        : heroImageUrl
+                        ? "Yeni görsel seçerek değiştirebilirsiniz."
+                        : "Görsel seçin, kaydet butonuna basınca yüklenir."}
                     </p>
-                    {menuUploading && (
-                      <div className="mt-2 flex items-center gap-2 text-xs font-medium text-purple-700">
-                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
-                        Menü fotoğrafları yükleniyor...
+                    {heroImageUrl && (
+                      <button
+                        type="button"
+                        onClick={handleHeroImageRemove}
+                        disabled={heroImageUploading || saving}
+                        className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        🗑️ Görseli Sil
+                      </button>
+                    )}
+                    {heroImageUploading && (
+                      <div className="flex items-center gap-2 text-xs font-medium text-cyan-700">
+                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
+                        Hero Image yükleniyor...
                       </div>
                     )}
                   </div>
-
-                  {/* Yüklü fotoğraflar */}
-                  {menuImages.length > 0 && (
-                    <div className="grid grid-cols-4 gap-3">
-                      {menuImages.map((url, index) => (
-                        <div key={index} className="relative group">
-                          <div className="aspect-square overflow-hidden rounded-xl border border-purple-200 bg-purple-100">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={url}
-                              alt={`Menu ${index + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleMenuImageRemove(index)}
-                            disabled={saving}
-                            className="absolute -top-2 -right-2 hidden group-hover:flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold transition hover:bg-red-600"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Kafe adı, kategori, etc... */}
+              {/* Menü */}
+              <div className="rounded-3xl border border-purple-200 bg-purple-50/80 p-5">
+                <p className="mb-1 text-sm font-semibold text-slate-900">📋 Menü</p>
+                <p className="mb-4 text-xs text-slate-500">
+                  Menü linki girilirse uygulama direkt o linke yönlendirir. Link yoksa aşağıdaki fotoğraflar gösterilir (maks. 5).
+                </p>
+
+                <div className="mb-4">
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">Menü Linki (opsiyonel)</label>
+                  <input
+                    value={form.menuUrl}
+                    onChange={(e) => update("menuUrl", e.target.value)}
+                    placeholder="https://example.com/menu"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                  />
+                  {form.menuUrl && (
+                    <div className="mt-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-medium text-purple-700">
+                      ✓ Link ayarlı — uygulama menü butonunda bu linke yönlendirir
+                    </div>
+                  )}
+                </div>
+
+                {!form.menuUrl && (
+                  <div className="space-y-4">
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleMenuChange}
+                        disabled={menuImages.length + menuFiles.length >= 5}
+                        className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-purple-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-purple-700 disabled:opacity-50"
+                      />
+                      <p className="mt-2 text-xs text-slate-500">
+                        {menuFiles.length > 0
+                          ? `${menuFiles.length} fotoğraf seçildi (${menuImages.length} zaten yüklü)`
+                          : `Fotoğraf seç → Kaydet'e bas (${menuImages.length}/5 yüklü)`}
+                      </p>
+                      {menuUploading && (
+                        <div className="mt-2 flex items-center gap-2 text-xs font-medium text-purple-700">
+                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                          Menü fotoğrafları yükleniyor...
+                        </div>
+                      )}
+                    </div>
+
+                    {menuImages.length > 0 && (
+                      <div className="grid grid-cols-4 gap-3">
+                        {menuImages.map((url, index) => (
+                          <div key={index} className="relative">
+                            <div className="aspect-square overflow-hidden rounded-xl border border-purple-200 bg-purple-100">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`Menu ${index + 1}`} className="h-full w-full object-cover" />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleMenuImageRemove(index)}
+                              disabled={saving}
+                              className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold transition hover:bg-red-600 disabled:opacity-50"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Form alanları */}
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="md:col-span-2">
                   <label className="mb-2 block text-xs font-semibold text-slate-600">Kafe Adı</label>
@@ -1153,21 +1021,25 @@ export default function BusinessTab() {
 
                 <div>
                   <label className="mb-2 block text-xs font-semibold text-slate-600">Kategori</label>
-                  <input
+                  <select
                     value={form.category}
                     onChange={(e) => update("category", e.target.value)}
                     className={inputClass()}
-                    placeholder="Örn. Kahve & İçecek"
-                  />
+                  >
+                    <option value="">— Kategori seç —</option>
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-xs font-semibold text-slate-600">Telefon</label>
+                  <label className="mb-2 block text-xs font-semibold text-slate-600">Instagram</label>
                   <input
-                    value={form.phone}
-                    onChange={(e) => update("phone", e.target.value)}
+                    value={form.instagramUrl}
+                    onChange={(e) => update("instagramUrl", e.target.value)}
                     className={inputClass()}
-                    placeholder="Örn. 0555 123 45 67"
+                    placeholder="https://instagram.com/kafeniz"
                   />
                 </div>
 
@@ -1190,83 +1062,38 @@ export default function BusinessTab() {
                     placeholder="Örn. 39.7837, 30.5119"
                   />
                   <p className="mt-1.5 text-xs text-slate-400">
-                    Format: <span className="font-mono">enlem, boylam</span>
+                    Format: <span className="font-mono">enlem, boylam</span> — Google Maps&apos;te sağ tıklayarak koordinatları kopyalayabilirsiniz.
                   </p>
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-xs font-semibold text-slate-600">Açılış Saati</label>
-                  <input
-                    type="time"
-                    value={form.openTime}
-                    onChange={(e) => update("openTime", e.target.value)}
-                    className={inputClass()}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-semibold text-slate-600">Kapanış Saati</label>
-                  <input
-                    type="time"
-                    value={form.closeTime}
-                    onChange={(e) => update("closeTime", e.target.value)}
-                    className={inputClass()}
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="mb-2 block text-xs font-semibold text-slate-600">Açıklama</label>
-                  <textarea
-                    value={form.description}
-                    onChange={(e) => update("description", e.target.value)}
-                    className="min-h-[120px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                    placeholder="Kısa işletme açıklaması"
-                  />
-                </div>
               </div>
             </div>
           </section>
 
-          {/* ✅ Features Section */}
+          {/* Özellikler */}
           <section className={`${shellCardClass()} overflow-hidden`}>
             <SectionTitle
               eyebrow="Özellikler"
               title="Kafe özellikleri"
-              description="Uygulamada ikon olarak gösterilir"
+              description="Uygulamada ikon olarak gösterilir."
             />
             <div className="p-6 grid grid-cols-2 gap-3">
               {FEATURE_LIST.map((f) => {
                 const active = features.includes(f.key);
-
                 return (
                   <div
                     key={f.key}
                     onClick={() => toggleFeature(f.key)}
-                    className={`
-                      flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
-                      transition-all border-2
-                      ${active 
-                        ? "bg-emerald-100 border-emerald-300" 
-                        : "bg-gray-50 border-gray-200 hover:border-gray-300"}
-                    `}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all border-2 ${
+                      active ? "bg-emerald-100 border-emerald-300" : "bg-gray-50 border-gray-200 hover:border-gray-300"
+                    }`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{f.icon}</span>
                       <span className="font-semibold text-sm">{f.label}</span>
                     </div>
-
-                    <div
-                      className={`
-                        w-10 h-6 rounded-full p-1 transition-all
-                        ${active ? "bg-emerald-500" : "bg-gray-300"}
-                      `}
-                    >
-                      <div
-                        className={`
-                          w-4 h-4 bg-white rounded-full transition-all
-                          ${active ? "translate-x-4" : ""}
-                        `}
-                      />
+                    <div className={`w-10 h-6 rounded-full p-1 transition-all ${active ? "bg-emerald-500" : "bg-gray-300"}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full transition-all ${active ? "translate-x-4" : ""}`} />
                     </div>
                   </div>
                 );
@@ -1274,43 +1101,98 @@ export default function BusinessTab() {
             </div>
           </section>
 
-          {/* ✅ Cards Section */}
+          {/* Yemek Kartları */}
           <section className={`${shellCardClass()} overflow-hidden`}>
             <SectionTitle
-              eyebrow="Yemek Kartları"
-              title="Geçerli kartlar"
-              description="Uygulamada text olarak gösterilir"
+              eyebrow="Ödeme Yöntemleri"
+              title="Kabul edilen ödemeler"
+              description="Uygulamada gösterilir."
             />
             <div className="p-6 grid grid-cols-2 gap-3">
               {CARD_LIST.map((c) => {
                 const active = cards.includes(c.key);
-
                 return (
                   <div
                     key={c.key}
                     onClick={() => toggleCard(c.key)}
-                    className={`
-                      flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer
-                      transition-all border-2
-                      ${active 
-                        ? "bg-emerald-100 border-emerald-300" 
-                        : "bg-gray-50 border-gray-200 hover:border-gray-300"}
-                    `}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all border-2 ${
+                      active ? "bg-emerald-100 border-emerald-300" : "bg-gray-50 border-gray-200 hover:border-gray-300"
+                    }`}
                   >
                     <span className="font-semibold text-sm">{c.label}</span>
+                    <div className={`w-10 h-6 rounded-full p-1 transition-all ${active ? "bg-emerald-500" : "bg-gray-300"}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full transition-all ${active ? "translate-x-4" : ""}`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
-                    <div
-                      className={`
-                        w-10 h-6 rounded-full p-1 transition-all
-                        ${active ? "bg-emerald-500" : "bg-gray-300"}
-                      `}
-                    >
-                      <div
-                        className={`
-                          w-4 h-4 bg-white rounded-full transition-all
-                          ${active ? "translate-x-4" : ""}
-                        `}
-                      />
+          {/* Çalışma Saatleri */}
+          <section className={`${shellCardClass()} overflow-hidden`}>
+            <SectionTitle
+              eyebrow="Çalışma Saatleri"
+              title="Günlük çalışma programı"
+              description="Her gün için açık/kapalı durumu ve saat aralığını belirleyin."
+            />
+            <div className="p-6 space-y-3">
+              {DAYS.map(({ key, label }) => {
+                const day = workingHours[key];
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-2xl border p-4 transition-all ${
+                      day.isOpen ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <Toggle
+                          checked={day.isOpen}
+                          onChange={() =>
+                            setWorkingHours((prev) => ({
+                              ...prev,
+                              [key]: { ...prev[key], isOpen: !prev[key].isOpen },
+                            }))
+                          }
+                        />
+                        <span className={`text-sm font-semibold ${day.isOpen ? "text-slate-900" : "text-slate-400"}`}>
+                          {label}
+                        </span>
+                        {!day.isOpen && (
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-400">
+                            Kapalı
+                          </span>
+                        )}
+                      </div>
+                      {day.isOpen && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={day.openTime}
+                            onChange={(e) =>
+                              setWorkingHours((prev) => ({
+                                ...prev,
+                                [key]: { ...prev[key], openTime: e.target.value },
+                              }))
+                            }
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                          />
+                          <span className="text-xs font-medium text-slate-400">—</span>
+                          <input
+                            type="time"
+                            value={day.closeTime}
+                            onChange={(e) =>
+                              setWorkingHours((prev) => ({
+                                ...prev,
+                                [key]: { ...prev[key], closeTime: e.target.value },
+                              }))
+                            }
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1327,12 +1209,11 @@ export default function BusinessTab() {
             />
             <div className="space-y-4 p-6">
 
-              {/* İşletme aktif toggle */}
               <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">İşletme aktif</p>
+                  <p className="text-sm font-semibold text-slate-900">İşletme Açık</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Firestore içindeki <span className="font-mono">isActive</span> alanını günceller.
+                    Kapalıyken müşteriler kafeyi aktif olarak göremez.
                   </p>
                 </div>
                 <Toggle
@@ -1341,12 +1222,11 @@ export default function BusinessTab() {
                 />
               </div>
 
-              {/* Görünürlük toggle */}
               <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Uygulamada görünür</p>
+                  <p className="text-sm font-semibold text-slate-900">Uygulamada Görünür</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Kullanıcılar işletmeni keşfet ekranında görebilir.
+                    Gizlenirse keşfet ekranında listelenmezsiniz.
                   </p>
                 </div>
                 <Toggle
@@ -1355,29 +1235,20 @@ export default function BusinessTab() {
                 />
               </div>
 
-              {/* Onay durumu */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold text-slate-900">Onay Durumu</p>
                 <div className="mt-2">
                   {form.approvalStatus === "approved" && (
-                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      ✓ Onaylandı
-                    </span>
+                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">✓ Onaylandı</span>
                   )}
                   {form.approvalStatus === "pending" && (
-                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                      ⏳ İnceleniyor
-                    </span>
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">⏳ İnceleniyor</span>
                   )}
                   {form.approvalStatus === "rejected" && (
-                    <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
-                      ✕ Reddedildi
-                    </span>
+                    <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">✕ Reddedildi</span>
                   )}
                   {form.approvalStatus === "draft" && (
-                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      Taslak
-                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Taslak</span>
                   )}
                   {!form.approvalStatus && (
                     <p className="text-xs text-slate-500">Henüz tanımlanmadı</p>
@@ -1385,7 +1256,6 @@ export default function BusinessTab() {
                 </div>
               </div>
 
-              {/* Kafe ID */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Kafe ID</p>
                 <p className="mt-1.5 font-mono text-sm text-slate-700">{form.cafeId || "-"}</p>
@@ -1399,7 +1269,7 @@ export default function BusinessTab() {
               <div>
                 <p className="text-sm font-semibold text-slate-900">Değişiklikleri kaydet</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Tüm işletme bilgileri, logo, story, hero image, menü fotoğrafları, özellikler ve kartlar Firestore'a işlenir.
+                  Tüm işletme bilgileri, logo, story, hero image, menü fotoğrafları, özellikler ve kartlar kaydedilir.
                 </p>
               </div>
               <button
@@ -1411,7 +1281,9 @@ export default function BusinessTab() {
                 {saving ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    {logoUploading || storyUploading || heroImageUploading || menuUploading ? "Dosya yükleniyor..." : "Kaydediliyor..."}
+                    {logoUploading || storyUploading || heroImageUploading || menuUploading
+                      ? "Dosya yükleniyor..."
+                      : "Kaydediliyor..."}
                   </>
                 ) : (
                   hasChanges ? "Değişiklikleri Kaydet" : "Kaydedildi ✓"
@@ -1434,7 +1306,6 @@ export default function BusinessTab() {
                 <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-start gap-3">
 
-                    {/* Logo */}
                     <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-emerald-500 bg-emerald-900 text-xs font-bold uppercase tracking-[0.14em] text-white shadow-sm">
                       {logoPreview ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -1455,9 +1326,9 @@ export default function BusinessTab() {
                           </p>
                         </div>
                         <div className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-500">
-                          {form.openTime && form.closeTime
-                            ? `${form.openTime} - ${form.closeTime}`
-                            : "Saat yok"}
+                          {todayHours?.isOpen
+                            ? `${todayHours.openTime} - ${todayHours.closeTime}`
+                            : "Bugün kapalı"}
                         </div>
                       </div>
                       <p className="mt-4 line-clamp-2 text-sm font-semibold leading-6 text-slate-600">
@@ -1481,42 +1352,31 @@ export default function BusinessTab() {
                     </div>
                   </div>
 
-                  {/* Story badge */}
                   {storyUrl && !storyExpired && (
                     <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
                       📱 Story aktif (24 saat içinde silinecek)
                     </div>
                   )}
-
-                  {/* Hero Image badge */}
                   {heroImageUrl && (
                     <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-medium text-cyan-700">
                       🖼️ Hero Image yüklendi
                     </div>
                   )}
-
-                  {/* Menu Images badge */}
                   {menuImages.length > 0 && (
                     <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-medium text-purple-700">
                       📋 Menü fotoğrafları ({menuImages.length})
                     </div>
                   )}
-
-                  {/* ✅ Features badge */}
                   {features.length > 0 && (
                     <div className="mt-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
                       ✨ Özellikler ({features.length} aktif)
                     </div>
                   )}
-
-                  {/* ✅ Cards badge */}
                   {cards.length > 0 && (
                     <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
                       💳 Kartlar ({cards.length} aktif)
                     </div>
                   )}
-
-                  {/* Görünürlük badge */}
                   {!form.isVisible && (
                     <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
                       ⚠️ Kafe şu an uygulamada gizli
@@ -1533,14 +1393,8 @@ export default function BusinessTab() {
       {cropImage && (
         <ImageCropper
           image={cropImage}
-          aspect={
-            cropType === "story"
-              ? 9 / 16
-              : 16 / 9
-          }
-          onCropComplete={(_, croppedAreaPixels) => {
-            setCropArea(croppedAreaPixels);
-          }}
+          aspect={cropType === "story" ? 9 / 16 : 1080 / 720}
+          onCropComplete={(_, croppedAreaPixels) => setCropArea(croppedAreaPixels)}
           onApply={applyCrop}
           onCancel={() => {
             setCropImage(null);

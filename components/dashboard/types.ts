@@ -80,6 +80,7 @@ export type BusinessForm = {
   isVisible: boolean;
 
   approvalStatus: string;
+  rejectionNote: string;
 
   createdAt?: any;
   updatedAt?: any;
@@ -91,13 +92,18 @@ export type BusinessForm = {
 export type LoyaltyForm = {
   rewardBuy: number;
   rewardGift: number;
-  rewardTitle: string;
+  programDescription: string;
+  productImageUrl: string;
+};
 
-  maxDailyStamp: number;
-
-  programActive: boolean;
-
-  expiryDays: number;
+export type LoyaltyCard = {
+  id: string;
+  position: number;
+  itemTypeId: string;
+  rewardBuy: number;
+  rewardGift: number;
+  programDescription: string;
+  productImageUrl: string;
 };
 
 

@@ -1,4 +1,9 @@
-export default async function getCroppedImg(imageSrc: string, crop: any) {
+export default async function getCroppedImg(
+  imageSrc: string,
+  crop: any,
+  outputWidth?: number,
+  outputHeight?: number
+) {
   const image = new Image();
   image.src = imageSrc;
 
@@ -9,8 +14,8 @@ export default async function getCroppedImg(imageSrc: string, crop: any) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
-  canvas.width = crop.width;
-  canvas.height = crop.height;
+  canvas.width = outputWidth ?? crop.width;
+  canvas.height = outputHeight ?? crop.height;
 
   ctx?.drawImage(
     image,
@@ -20,11 +25,11 @@ export default async function getCroppedImg(imageSrc: string, crop: any) {
     crop.height,
     0,
     0,
-    crop.width,
-    crop.height
+    canvas.width,
+    canvas.height
   );
 
   return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), "image/jpeg");
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
   });
 }

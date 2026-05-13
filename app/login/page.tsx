@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -43,8 +44,8 @@ export default function LoginPage() {
       } else if (role === "owner") {
         router.replace("/dashboard");
       } else {
-        setErrorText("Bu panele erişim yetkiniz yok.");
         await auth.signOut();
+        setErrorText("Hesabınız henüz admin tarafından onaylanmamış. Onay sonrası tekrar giriş yapabilirsiniz.");
       }
     } catch (err: unknown) {
       console.error(err);
@@ -61,10 +62,10 @@ export default function LoginPage() {
         {/* Logo / Başlık */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-2xl font-bold text-white shadow-sm">
-            S
+            L
           </div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
-            SincApp
+            LoopyGo
           </p>
           <h1 className="mt-1 text-xl font-bold text-slate-900">
             Panel Girişi
@@ -128,10 +129,37 @@ export default function LoginPage() {
               )}
             </button>
           </div>
+
+          <div className="mt-5 border-t border-slate-100 pt-4 text-center text-sm text-slate-500">
+            Kafe sahibi misiniz?{" "}
+            <Link href="/register" className="font-semibold text-emerald-600 hover:text-emerald-700">
+              Başvuru yapın
+            </Link>
+          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400">
           Admin → /admin &nbsp;·&nbsp; Owner → /dashboard
+        </p>
+
+        <p className="mt-4 text-center text-xs text-slate-400">
+          Giriş yaparak{" "}
+          <Link
+            href="/terms"
+            target="_blank"
+            className="underline underline-offset-2 hover:text-slate-600 transition-colors"
+          >
+            Kullanım Koşulları
+          </Link>
+          {" "}ve{" "}
+          <Link
+            href="/privacy"
+            target="_blank"
+            className="underline underline-offset-2 hover:text-slate-600 transition-colors"
+          >
+            Gizlilik Politikası
+          </Link>
+          &apos;nı kabul etmiş olursunuz.
         </p>
       </div>
     </main>

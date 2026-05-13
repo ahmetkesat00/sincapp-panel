@@ -13,6 +13,8 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
@@ -130,10 +132,12 @@ export default function CampaignsTab() {
           collection(db, "cafes", foundCafeId, "campaigns")
         );
 
+        const activeGlobalIds = new Set(globals.map((g) => g.id));
+
         const enabled = new Set<string>();
         cafeSubSnap.docs.forEach((d) => {
           const data = d.data() as CafeCampaign;
-          if (data.isEnabled) enabled.add(d.id);
+          if (data.isEnabled && activeGlobalIds.has(d.id)) enabled.add(d.id);
         });
 
         setPendingIds(new Set(enabled));
@@ -195,9 +199,9 @@ export default function CampaignsTab() {
       const batch = writeBatch(db);
 
       for (const id of pendingIds) {
-        const ref = doc(db, "cafes", cafeId, "campaigns", id);
+        // Kafe alt koleksiyonu
         batch.set(
-          ref,
+          doc(db, "cafes", cafeId, "campaigns", id),
           {
             campaignId: id,
             isEnabled: true,
@@ -206,11 +210,22 @@ export default function CampaignsTab() {
           },
           { merge: true }
         );
+        // Global kampanyaya cafeId ekle
+        if (!initialJoinedIds.has(id)) {
+          batch.update(doc(db, "campaigns", id), {
+            participantCafeIds: arrayUnion(cafeId),
+          });
+        }
       }
 
       for (const id of initialJoinedIds) {
         if (!pendingIds.has(id)) {
+          // Kafe alt koleksiyonundan sil
           batch.delete(doc(db, "cafes", cafeId, "campaigns", id));
+          // Global kampanyadan cafeId çıkar
+          batch.update(doc(db, "campaigns", id), {
+            participantCafeIds: arrayRemove(cafeId),
+          });
         }
       }
 

@@ -23,7 +23,7 @@ export default function DashboardHeader({
             {navItems.find((item) => item.id === activePage)?.label}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-500">
-            SincApp owner paneli
+            LoopyGo Owner Panel
           </p>
         </div>
 
