@@ -23,7 +23,7 @@ import { fieldClass, shellCardClass } from "../helpers";
 import type { BusinessForm, LoyaltyCard } from "../types";
 
 const ITEM_TYPES = ["Kahve", "Tatlı", "Pizza", "Hamburger", "Diğer"];
-const MAX_CARDS = 3;
+const MAX_CARDS = 1;
 
 type PendingToken = {
   id: string;
