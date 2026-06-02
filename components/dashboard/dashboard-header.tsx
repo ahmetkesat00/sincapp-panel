@@ -1,8 +1,8 @@
 "use client";
 
-import { Clock3, Save } from "lucide-react";
+import { Clock3 } from "lucide-react";
 import type { NavId, NavItem } from "./types";
-import { ghostButtonClass, primaryButtonClass } from "./helpers";
+import { ghostButtonClass } from "./helpers";
 
 type Props = {
   activePage: NavId;
@@ -27,16 +27,10 @@ export default function DashboardHeader({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button type="button" className={ghostButtonClass()}>
-            <Clock3 className="mr-2 h-4 w-4" />
-            Son güncelleme: {lastUpdatedText}
-          </button>
-          <button type="button" className={primaryButtonClass()}>
-            <Save className="h-4 w-4" />
-            Değişiklikleri Kaydet
-          </button>
-        </div>
+        <button type="button" className={ghostButtonClass()}>
+          <Clock3 className="mr-2 h-4 w-4" />
+          Son güncelleme: {lastUpdatedText}
+        </button>
       </div>
     </header>
   );
