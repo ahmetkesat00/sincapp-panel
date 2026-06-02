@@ -210,25 +210,6 @@ export default function ReportsTab() {
         </div>
       </section>
 
-      {/* Tahmini katkı */}
-      <section className={`${shellCardClass()} overflow-hidden lg:col-span-2`}>
-        <SectionTitle
-          eyebrow="Tahmini Katkı"
-          title="Sadakat programı etkisi"
-          description="Şimdilik gerçek satış verisi olmadığı için hesaplama yapılamıyor."
-        />
-        <div className="space-y-4 p-6">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">
-              Tahmini tekrar ziyaret katkısı
-            </p>
-            <p className="mt-3 text-3xl font-bold text-emerald-900">₺0</p>
-            <p className="mt-2 text-sm text-emerald-800/80">
-              Satış / sipariş verisi bağlandığında güncellenecek.
-            </p>
-          </div>
-        </div>
-      </section>
 
     </div>
   );
