@@ -178,11 +178,12 @@ export default function DashboardPage() {
           : !!(cafeData?.openTime && cafeData?.closeTime);
         setHasWorkingHours(hasWH);
 
+        const firstCard = cards[0] ?? null;
         setLoyaltyForm({
-          rewardBuy: cafeData?.rewardBuy ?? 0,
-          rewardGift: cafeData?.rewardGift ?? 0,
-          programDescription: cafeData?.programDescription ?? "",
-          productImageUrl: cafeData?.productImageUrl ?? "",
+          rewardBuy: firstCard?.rewardBuy ?? cafeData?.rewardBuy ?? 0,
+          rewardGift: firstCard?.rewardGift ?? cafeData?.rewardGift ?? 0,
+          programDescription: firstCard?.programDescription ?? cafeData?.programDescription ?? "",
+          productImageUrl: firstCard?.productImageUrl ?? cafeData?.productImageUrl ?? "",
         });
 
         setLastUpdatedText(
