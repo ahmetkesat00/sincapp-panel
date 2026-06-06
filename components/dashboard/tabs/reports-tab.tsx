@@ -81,15 +81,16 @@ function formatTime(ts: Timestamp | null): string {
 }
 
 function statusLabel(status: string): string {
-  if (status === "approved") return "Onaylandı";
+  if (status === "processed") return "Tamamlandı";
+  if (status === "approved") return "Tamamlandı";
   if (status === "rejected") return "Reddedildi";
   if (status === "scanned") return "Onay Bekliyor";
-  if (status === "pending") return "Tarandı Bekliyor";
   if (status === "expired") return "Süresi Doldu";
   return status;
 }
 
 function statusStyle(status: string): string {
+  if (status === "processed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "rejected") return "border-red-200 bg-red-50 text-red-600";
   if (status === "scanned") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -213,7 +214,7 @@ export default function ReportsTab() {
           return {
             id: d.id,
             userId: (data.scannedUserId || data.userId || "") as string,
-            type: (data.type || "") as string,
+            type: (data.processedType || data.type || "") as string,
             status: (data.status || "") as string,
             createdAt: (data.createdAt as Timestamp) ?? null,
             scannedAt: (data.scannedAt as Timestamp) ?? null,
