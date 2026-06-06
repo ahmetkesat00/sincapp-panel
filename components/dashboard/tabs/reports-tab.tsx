@@ -9,7 +9,6 @@ import {
   where,
   getDocs,
   orderBy,
-  limit,
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -39,13 +38,13 @@ type TxRow = {
   scannedAt: Timestamp | null;
 };
 
-type DateFilter = "daily" | "weekly" | "monthly" | "all";
+type DateFilter = "daily" | "weekly" | "monthly";
 
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
 
-function getFilterStart(filter: DateFilter): Date | null {
+function getFilterStart(filter: DateFilter): Date {
   const now = new Date();
   if (filter === "daily") {
     const d = new Date(now);
@@ -57,12 +56,9 @@ function getFilterStart(filter: DateFilter): Date | null {
     d.setDate(d.getDate() - 7);
     return d;
   }
-  if (filter === "monthly") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 30);
-    return d;
-  }
-  return null;
+  const d = new Date(now);
+  d.setDate(d.getDate() - 30);
+  return d;
 }
 
 function formatTime(ts: Timestamp | null): string {
@@ -122,7 +118,7 @@ export default function ReportsTab() {
   const [activeCampaigns, setActiveCampaigns] = useState<ChartDataItem[]>([]);
   const [totalStamps, setTotalStamps] = useState(0);
   const [totalRewards, setTotalRewards] = useState(0);
-  const [allTx, setAllTx] = useState<TxRow[]>([]);
+  const [txList, setTxList] = useState<TxRow[]>([]);
   const [dateFilter, setDateFilter] = useState<DateFilter>("daily");
 
   // Özet ve müşteri verileri
@@ -194,33 +190,36 @@ export default function ReportsTab() {
     return () => unsub();
   }, []);
 
-  // İşlem geçmişi — cafeId hazır olunca çek
+  // İşlem geçmişi — cafeId veya filtre değişince yeniden çek
   useEffect(() => {
     if (!cafeId) return;
 
     async function loadTx() {
       setTxLoading(true);
       try {
+        const start = getFilterStart(dateFilter);
         const snap = await getDocs(
           query(
             collection(db, "qrTokens"),
             where("cafeId", "==", cafeId),
-            orderBy("createdAt", "desc"),
-            limit(200)
+            where("createdAt", ">=", Timestamp.fromDate(start)),
+            orderBy("createdAt", "desc")
           )
         );
-        const rows: TxRow[] = snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            userId: (data.scannedUserId || data.userId || "") as string,
-            type: (data.processedType || data.type || "") as string,
-            status: (data.status || "") as string,
-            createdAt: (data.createdAt as Timestamp) ?? null,
-            scannedAt: (data.scannedAt as Timestamp) ?? null,
-          };
-        });
-        setAllTx(rows);
+        const rows: TxRow[] = snap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              userId: (data.scannedUserId || data.userId || "") as string,
+              type: (data.processedType || data.type || "") as string,
+              status: (data.status || "") as string,
+              createdAt: (data.createdAt as Timestamp) ?? null,
+              scannedAt: (data.scannedAt as Timestamp) ?? null,
+            };
+          })
+          .filter((tx) => tx.status !== "pending");
+        setTxList(rows);
       } catch (err) {
         console.error("TX load error:", err);
       } finally {
@@ -229,15 +228,9 @@ export default function ReportsTab() {
     }
 
     loadTx();
-  }, [cafeId]);
+  }, [cafeId, dateFilter]);
 
-  // Client-side tarih filtresi
-  const filteredTx = allTx.filter((tx) => {
-    if (tx.status === "pending") return false; // henüz taranmamış
-    const start = getFilterStart(dateFilter);
-    if (!start || !tx.createdAt) return dateFilter === "all";
-    return tx.createdAt.toDate() >= start;
-  });
+  const filteredTx = txList;
 
   const topCustomers = customers.slice(0, 4);
 
@@ -349,8 +342,8 @@ export default function ReportsTab() {
 
           {/* Filtre butonları */}
           <div className="flex shrink-0 gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1">
-            {(["daily", "weekly", "monthly", "all"] as DateFilter[]).map((f) => {
-              const labels = { daily: "Günlük", weekly: "Haftalık", monthly: "Aylık", all: "Tümü" };
+            {(["daily", "weekly", "monthly"] as DateFilter[]).map((f) => {
+              const labels = { daily: "Günlük", weekly: "Haftalık", monthly: "Aylık" };
               return (
                 <button
                   key={f}
