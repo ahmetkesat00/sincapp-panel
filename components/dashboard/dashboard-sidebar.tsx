@@ -30,8 +30,8 @@ export default function DashboardSidebar({
     .toUpperCase();
 
   return (
-    <aside className="border-r border-slate-200 bg-slate-950 text-white">
-      <div className="flex h-full flex-col p-5 overflow-y-auto">
+    <aside className="h-full border-r border-slate-200 bg-slate-950 text-white">
+      <div className="flex h-full flex-col p-5">
         <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-500 font-bold text-white">
