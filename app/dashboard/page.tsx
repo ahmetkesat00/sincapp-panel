@@ -324,6 +324,7 @@ export default function DashboardPage() {
             onChangePage={setActivePage}
             cafeName={businessForm.cafeName}
             category={businessForm.category}
+            logoUrl={businessForm.logoUrl}
             onLogout={() => signOut(auth)}
           />
         }
@@ -353,6 +354,7 @@ export default function DashboardPage() {
           onChangePage={setActivePage}
           cafeName={businessForm.cafeName}
           category={businessForm.category}
+          logoUrl={businessForm.logoUrl}
           onLogout={() => signOut(auth)}
         />
       }

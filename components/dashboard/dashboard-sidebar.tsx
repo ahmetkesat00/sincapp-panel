@@ -9,6 +9,7 @@ type Props = {
   onChangePage: (page: NavId) => void;
   cafeName: string;
   category: string;
+  logoUrl: string;
   onLogout: () => void;
 };
 
@@ -18,22 +19,35 @@ export default function DashboardSidebar({
   onChangePage,
   cafeName,
   category,
+  logoUrl,
   onLogout,
 }: Props) {
+  const initials = (cafeName || "K")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <aside className="border-r border-slate-200 bg-slate-950 text-white">
       <div className="flex h-full flex-col p-5 overflow-y-auto">
         <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 font-bold text-white">
-              S
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-500 font-bold text-white">
+              {logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoUrl} alt={cafeName} className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">
                 LoopyGo
               </p>
-              <p className="mt-1 text-sm font-semibold text-white">
-                Owner Panel
+              <p className="mt-1 truncate text-sm font-semibold text-white">
+                {cafeName || "Kafe adı"}
               </p>
             </div>
           </div>
@@ -62,17 +76,11 @@ export default function DashboardSidebar({
           })}
         </nav>
 
-        <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4">
-          <p className="text-sm font-semibold text-white">
-            {cafeName || "Kafe adı"}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            {category || "Kategori"}
-          </p>
+        <div className="mt-auto">
           <button
             type="button"
             onClick={onLogout}
-            className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+            className="inline-flex w-full items-center gap-2 rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
           >
             <LogOut className="h-4 w-4" />
             Çıkış yap
