@@ -832,7 +832,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
               description="Kartlar uygulamada bu sıraya göre listelenir."
             />
             <div className="space-y-3 bg-slate-50 p-5">
-              {[1, 2, 3].map((pos) => {
+              {Array.from({ length: MAX_CARDS }, (_, i) => i + 1).map((pos) => {
                 const card = cards.find((c) => c.position === pos);
                 return (
                   <div
