@@ -676,7 +676,7 @@ export default function CampaignsTab() {
             <SectionTitle
               eyebrow="Özel Kampanyalarım"
               title="Kendi kampanyalarını yönet"
-              description="Kafen için özel kampanyalar oluştur. Bu kampanyalar sadece senin kafen için geçerlidir."
+              description="Mağazanız için özel kampanyalar oluştur. Bu kampanyalar sadece sizin mağazanıza özeldir."
             />
 
             <div className="space-y-3 p-6">
@@ -777,7 +777,7 @@ export default function CampaignsTab() {
               <p className="mt-1 text-xs leading-5 text-slate-500">
                 {editingId
                   ? "Bilgileri güncelleyip kaydet."
-                  : "Kafen için özel bir kampanya tanımla."}
+                  : "Mağazanız için özel bir kampanya tanımlayın."}
               </p>
 
               <div className="mt-4 space-y-3">

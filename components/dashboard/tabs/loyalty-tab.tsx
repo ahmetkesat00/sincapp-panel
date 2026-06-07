@@ -307,7 +307,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
     setQrError(null);
     setQrValue(null);
     if (!cafeId) {
-      setQrError("Kafe bilgileri yüklenemedi.");
+      setQrError("Mağaza bilgileri yüklenemedi.");
       return;
     }
     if (!auth.currentUser) {
@@ -409,7 +409,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
 
           {!cafeId && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              Kafe bilgileri yüklenemedi. Sayfayı yenileyiniz.
+              Mağaza bilgileri yüklenemedi. Sayfayı yenileyiniz.
             </div>
           )}
 
@@ -861,7 +861,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
                           </div>
                           <div className="flex-1 min-w-0 p-3">
                             <p className="truncate text-sm font-bold text-slate-900">
-                              {businessForm.cafeName || "Kafe adı"}
+                              {businessForm.cafeName || "Mağaza adı"}
                             </p>
                             <p className="text-xs text-slate-400">
                               {card.itemTypeId}

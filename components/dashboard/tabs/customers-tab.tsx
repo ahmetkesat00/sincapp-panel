@@ -139,7 +139,7 @@ export default function CustomersTab() {
         <SectionTitle
           eyebrow="Müşteriler"
           title="Kullanıcı puan ve damga takibi"
-          description="Bu kafede sadakat kartı olan tüm kullanıcılar listelenir."
+          description="Bu mağazada sadakat kartı olan tüm kullanıcılar listelenir."
         />
 
         {errorText && (
@@ -181,7 +181,7 @@ export default function CustomersTab() {
               {filtered.length === 0 ? (
                 <div className="border-t border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
                   {customers.length === 0
-                    ? "Bu kafede henüz kart oluşturulmamış."
+                    ? "Bu mağazada henüz kart oluşturulmamış."
                     : "Arama sonucu bulunamadı."}
                 </div>
               ) : (

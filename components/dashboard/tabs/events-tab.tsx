@@ -326,7 +326,7 @@ export default function EventsTab({ cafeId }: { cafeId?: string }) {
       <div className="flex items-center justify-center py-20">
         <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-          <p className="text-sm font-medium text-slate-600">Kafe yükleniyor...</p>
+          <p className="text-sm font-medium text-slate-600">Mağaza yükleniyor...</p>
         </div>
       </div>
     );
@@ -340,7 +340,7 @@ export default function EventsTab({ cafeId }: { cafeId?: string }) {
         <SectionTitle
           eyebrow="Etkinlikler"
           title="Yeni etkinlik oluştur"
-          description="Kafen için etkinlik duyurusu oluştur. Görsel, tarih ve saati belirterek müşterilerine duyur."
+          description="Mağazanız için etkinlik duyurusu oluşturun. Görsel, tarih ve saati belirterek müşterilerinize duyurun."
         />
 
         <form onSubmit={handleSaveEvent} className="space-y-5 p-6">

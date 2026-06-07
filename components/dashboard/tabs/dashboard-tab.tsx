@@ -170,7 +170,7 @@ export default function DashboardTab({ businessForm, loyaltyForm }: Props) {
                 LoopyGo Owner Panel
               </p>
               <h1 className="mt-0.5 truncate text-2xl font-bold text-white sm:text-3xl">
-                {businessForm.cafeName || "Kafe adı"}
+                {businessForm.cafeName || "Mağaza adı"}
               </h1>
               {businessForm.category && (
                 <p className="mt-1 text-sm text-white/70">{businessForm.category}</p>
@@ -224,7 +224,7 @@ export default function DashboardTab({ businessForm, loyaltyForm }: Props) {
         <StatCard
           label="Aktif Kartlar"
           value={stats.activeCards}
-          hint="Bu kafede kartı olan kullanıcı"
+          hint="Bu mağazada kartı olan kullanıcı"
           icon={WalletCards}
           loading={loading}
         />
@@ -294,7 +294,7 @@ export default function DashboardTab({ businessForm, loyaltyForm }: Props) {
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-6 py-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-              Kafe Durumu
+              Mağaza Durumu
             </p>
             <h2 className="mt-1 text-base font-semibold text-slate-900">
               Mevcut durum özeti

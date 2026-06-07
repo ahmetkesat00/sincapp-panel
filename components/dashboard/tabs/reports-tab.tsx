@@ -174,11 +174,7 @@ export default function ReportsTab() {
           label: d.id.slice(0, 8),
           value: d.data().isEnabled ? 1 : 0,
         }));
-        setActiveCampaigns(campData.length > 0 ? campData : [
-          { label: "Kampanya 1", value: 0 },
-          { label: "Kampanya 2", value: 0 },
-          { label: "Kampanya 3", value: 0 },
-        ]);
+        setActiveCampaigns(campData);
 
       } catch (err) {
         console.error("ReportsTab load error:", err);
@@ -324,7 +320,13 @@ export default function ReportsTab() {
             description="Aktif / pasif kampanya dağılımı."
           />
           <div className="p-6">
-            <MiniBarChart data={activeCampaigns} />
+            {activeCampaigns.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Henüz katıldığınız kampanya yok.
+              </div>
+            ) : (
+              <MiniBarChart data={activeCampaigns} />
+            )}
           </div>
         </section>
       </div>

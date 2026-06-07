@@ -719,7 +719,7 @@ export default function BusinessTab() {
       <div className="flex items-center justify-center py-20">
         <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-          <p className="text-sm font-medium text-slate-600">Kafe bilgileri yükleniyor...</p>
+          <p className="text-sm font-medium text-slate-600">Mağaza bilgileri yükleniyor...</p>
         </div>
       </div>
     );
@@ -773,13 +773,13 @@ export default function BusinessTab() {
             <SectionTitle
               eyebrow="İşletme Bilgileri"
               title="Profil ve görünür alanlar"
-              description="Uygulamada kullanıcılara gösterilen kafe bilgileri."
+              description="Uygulamada kullanıcılara gösterilen mağaza bilgileri."
             />
             <div className="space-y-5 p-6">
 
               {/* Logo */}
               <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-5">
-                <p className="mb-1 text-sm font-semibold text-slate-900">🎨 Kafe Logosu (Yuvarlak)</p>
+                <p className="mb-1 text-sm font-semibold text-slate-900">🎨 Mağaza Logosu (Yuvarlak)</p>
                 <p className="mb-4 text-xs text-slate-500">PNG veya JPG formatında. Otomatik olarak yuvarlak şekilde kırpılır.</p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-emerald-500 bg-white shadow-sm">
@@ -814,7 +814,7 @@ export default function BusinessTab() {
 
               {/* Story */}
               <div className="rounded-3xl border border-amber-200 bg-amber-50/80 p-5">
-                <p className="mb-1 text-sm font-semibold text-slate-900">📱 Kafe Story&apos;si</p>
+                <p className="mb-1 text-sm font-semibold text-slate-900">📱 Mağaza Story&apos;si</p>
                 <p className="mb-4 text-xs text-slate-500">PNG veya JPG. 24 saat sonra otomatik silinir. Günlük 1 story yükleyebilirsiniz.</p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
@@ -888,7 +888,7 @@ export default function BusinessTab() {
               {/* Hero Image */}
               <div className="rounded-3xl border border-cyan-200 bg-cyan-50/80 p-5">
                 <p className="mb-1 text-sm font-semibold text-slate-900">🖼️ Detay Sayfası Görseli (Hero Image)</p>
-                <p className="mb-4 text-xs text-slate-500">PNG veya JPG. Önerilen: 1080×720 px (3:2). Konu tam ortada olmalı — kenarlar kırpılır. Kafe detay sayfasının üst kısmında gösterilir.</p>
+                <p className="mb-4 text-xs text-slate-500">PNG veya JPG. Önerilen: 1080×720 px (3:2). Konu tam ortada olmalı — kenarlar kırpılır. Mağaza detay sayfasının üst kısmında gösterilir.</p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-cyan-200 bg-white shadow-sm">
                     {heroImagePreview ? (
@@ -1010,7 +1010,7 @@ export default function BusinessTab() {
               {/* Form alanları */}
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label className="mb-2 block text-xs font-semibold text-slate-600">Kafe Adı</label>
+                  <label className="mb-2 block text-xs font-semibold text-slate-600">Mağaza Adı</label>
                   <input
                     value={form.cafeName}
                     onChange={(e) => update("cafeName", e.target.value)}
@@ -1074,7 +1074,7 @@ export default function BusinessTab() {
           <section className={`${shellCardClass()} overflow-hidden`}>
             <SectionTitle
               eyebrow="Özellikler"
-              title="Kafe özellikleri"
+              title="Mağaza özellikleri"
               description="Uygulamada ikon olarak gösterilir."
             />
             <div className="p-6 grid grid-cols-2 gap-3">
@@ -1213,7 +1213,7 @@ export default function BusinessTab() {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">İşletme Açık</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Kapalıyken müşteriler kafeyi aktif olarak göremez.
+                    Kapalıyken müşteriler mağazayı aktif olarak göremez.
                   </p>
                 </div>
                 <Toggle
@@ -1299,7 +1299,7 @@ export default function BusinessTab() {
             <SectionTitle
               eyebrow="Önizleme"
               title="Kullanıcı kartı"
-              description="Gerçek kafe verisine göre önizleme."
+              description="Gerçek mağaza verisine göre önizleme."
             />
             <div className="bg-slate-50 p-5">
               <div className="rounded-[32px] border border-slate-200 bg-[#EEF4F0] p-3 shadow-inner">
@@ -1319,7 +1319,7 @@ export default function BusinessTab() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-lg font-bold text-slate-900">
-                            {form.cafeName || "Kafe adı"}
+                            {form.cafeName || "Mağaza adı"}
                           </p>
                           <p className="mt-1 truncate text-sm font-medium text-slate-400">
                             {form.category || "Kategori"}
@@ -1332,7 +1332,7 @@ export default function BusinessTab() {
                         </div>
                       </div>
                       <p className="mt-4 line-clamp-2 text-sm font-semibold leading-6 text-slate-600">
-                        ☕ {form.cafeName || form.category || "Kafe bilgisi henüz girilmedi"}
+                        ☕ {form.cafeName || form.category || "Mağaza bilgisi henüz girilmedi"}
                       </p>
                     </div>
                   </div>
@@ -1379,7 +1379,7 @@ export default function BusinessTab() {
                   )}
                   {!form.isVisible && (
                     <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-                      ⚠️ Kafe şu an uygulamada gizli
+                      ⚠️ Mağaza şu an uygulamada gizli
                     </div>
                   )}
                 </div>
