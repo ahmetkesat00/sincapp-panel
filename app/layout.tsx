@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Sinc App",
-  description: "Admin Panel",
+  title: "LoopyGo Panel",
+  description: "LoopyGo Mağaza Yönetim Paneli",
 };
 
 export default function RootLayout({
