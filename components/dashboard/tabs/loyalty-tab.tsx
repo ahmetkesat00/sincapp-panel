@@ -165,7 +165,6 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
               productImageUrl: card.productImageUrl ?? "",
             }
           : null,
-        updatedAt: serverTimestamp(),
       });
     } else {
       await updateDoc(doc(db, "cafes", cafeId), {
