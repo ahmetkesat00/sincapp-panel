@@ -9,9 +9,14 @@ import { shellCardClass, fieldClass } from "../helpers";
 type Props = {
   uid: string;
   cafeId: string;
+  chain: { id: string; name: string; branchCafeIds: string[] } | null;
+  pendingBranchRequest: boolean;
+  requestingBranch: boolean;
+  branchRequestMessage: string;
+  onRequestBranch: () => void;
 };
 
-export default function SettingsTab({ uid, cafeId }: Props) {
+export default function SettingsTab({ uid, cafeId, chain, pendingBranchRequest, requestingBranch, branchRequestMessage, onRequestBranch }: Props) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -55,7 +60,7 @@ export default function SettingsTab({ uid, cafeId }: Props) {
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-lg space-y-6">
       <section className={`${shellCardClass()} overflow-hidden`}>
         <SectionTitle
           eyebrow="Güvenlik"
@@ -124,6 +129,44 @@ export default function SettingsTab({ uid, cafeId }: Props) {
               "Şifreyi Güncelle"
             )}
           </button>
+        </div>
+      </section>
+      {/* Zincir / Şube Talebi */}
+      <section className={`${shellCardClass()} overflow-hidden`}>
+        <SectionTitle
+          eyebrow="Zincir Yönetimi"
+          title={chain ? `${chain.name} · ${chain.branchCafeIds.length} şube` : "Zincir İşletme"}
+          description={
+            chain
+              ? "Zincirinize yeni bir şube eklemek için talep gönderin. Admin onayladıktan sonra şube panelinize eklenir."
+              : "Birden fazla şubeniz mi var? Talep gönderin, admin onayladıktan sonra tüm şubelerinizi tek panelden yönetebilirsiniz."
+          }
+        />
+        <div className="p-6 space-y-3">
+          {branchRequestMessage && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              {branchRequestMessage}
+            </div>
+          )}
+          {pendingBranchRequest ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+              {chain ? "Şube talebiniz inceleniyor..." : "Zincir talebiniz inceleniyor..."}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onRequestBranch}
+              disabled={requestingBranch}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {requestingBranch ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Gönderiliyor...
+                </>
+              ) : chain ? "Yeni Şube Talebi Gönder" : "Zincir Başvurusu Gönder"}
+            </button>
+          )}
         </div>
       </section>
     </div>

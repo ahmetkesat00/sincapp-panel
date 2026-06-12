@@ -13,6 +13,7 @@ import {
   where,
   updateDoc,
   serverTimestamp,
+  addDoc,
 } from "firebase/firestore";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -101,6 +102,14 @@ export default function DashboardPage() {
   const [hasWorkingHours, setHasWorkingHours] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  // Zincir durumu
+  const [chain, setChain] = useState<{ id: string; name: string; branchCafeIds: string[] } | null>(null);
+  const [branchCafes, setBranchCafes] = useState<{ id: string; name: string }[]>([]);
+  const [showBranchSelector, setShowBranchSelector] = useState(false);
+  const [pendingBranchRequest, setPendingBranchRequest] = useState(false);
+  const [requestingBranch, setRequestingBranch] = useState(false);
+  const [branchRequestMessage, setBranchRequestMessage] = useState("");
+
   const [loyaltyForm, setLoyaltyForm] = useState<LoyaltyForm>({
     rewardBuy: 0,
     rewardGift: 0,
@@ -109,6 +118,49 @@ export default function DashboardPage() {
   });
 
 
+
+  async function loadCafeById(cId: string) {
+    const cafeDoc = await getDoc(doc(db, "cafes", cId));
+    if (!cafeDoc.exists()) {
+      setErrorText("Şube bulunamadı.");
+      setLoading(false);
+      return;
+    }
+    const cafeData = cafeDoc.data();
+    setCafeId(cId);
+    setBusinessForm({
+      cafeId: cId,
+      cafeName: cafeData?.name ?? "",
+      category: cafeData?.category ?? "",
+      phone: cafeData?.phone ?? "",
+      address: cafeData?.address ?? "",
+      location: formatLocationValue(cafeData?.location ?? ""),
+      openTime: cafeData?.openTime ?? "",
+      closeTime: cafeData?.closeTime ?? "",
+      logoUrl: cafeData?.logoUrl ?? "",
+      description: cafeData?.description ?? "",
+      isOpen: cafeData?.isActive ?? false,
+      isVisible: cafeData?.isVisible ?? false,
+      approvalStatus: cafeData?.approvalStatus ?? "draft",
+      rejectionNote: cafeData?.rejectionNote ?? "",
+    });
+    const cards = Array.isArray(cafeData?.loyaltyCards) ? cafeData.loyaltyCards : [];
+    setLoyaltyCardsCount(cards.length);
+    const wh = cafeData?.workingHours;
+    const hasWH = wh && typeof wh === "object"
+      ? Object.values(wh).some((d: any) => d?.isOpen === true)
+      : !!(cafeData?.openTime && cafeData?.closeTime);
+    setHasWorkingHours(hasWH);
+    const firstCard = cards[0] ?? null;
+    setLoyaltyForm({
+      rewardBuy: firstCard?.rewardBuy ?? cafeData?.rewardBuy ?? 0,
+      rewardGift: firstCard?.rewardGift ?? cafeData?.rewardGift ?? 0,
+      programDescription: firstCard?.programDescription ?? cafeData?.programDescription ?? "",
+      productImageUrl: firstCard?.productImageUrl ?? cafeData?.productImageUrl ?? "",
+    });
+    setLastUpdatedText(formatTimestamp((cafeData?.updatedAt as Timestamp) ?? null));
+    setLoading(false);
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -121,78 +173,64 @@ export default function DashboardPage() {
         setUid(user.uid);
 
         const userSnap = await getDoc(doc(db, "users", user.uid));
-
         if (!userSnap.exists()) {
           setErrorText("Kullanıcı kaydı bulunamadı.");
+          setLoading(false);
           return;
         }
 
         const userData = userSnap.data();
-
         if (userData.role !== "owner") {
           router.replace("/login");
           return;
         }
 
-        const cafeQuery = query(
-          collection(db, "cafes"),
-          where("ownerUid", "==", user.uid)
+        // Bekleyen şube talebi var mı?
+        const branchReqSnap = await getDocs(
+          query(collection(db, "pendingBranchRequests"), where("ownerUid", "==", user.uid), where("status", "==", "pending"))
+        );
+        setPendingBranchRequest(!branchReqSnap.empty);
+
+        // Zincir kontrolü — ownerUid'e ait chain var mı?
+        const chainSnap = await getDocs(
+          query(collection(db, "chains"), where("ownerUid", "==", user.uid))
         );
 
-        const cafeSnap = await getDocs(cafeQuery);
+        if (!chainSnap.empty) {
+          const chainDoc = chainSnap.docs[0];
+          const chainData = chainDoc.data();
+          const branchIds: string[] = Array.isArray(chainData.branchCafeIds) ? chainData.branchCafeIds : [];
+          setChain({ id: chainDoc.id, name: chainData.name ?? "", branchCafeIds: branchIds });
 
-        if (cafeSnap.empty) {
-          setErrorText("Bu kullanıcıya ait kafe bulunamadı.");
-          return;
+          const list = await Promise.all(
+            branchIds.map(async (id) => {
+              const s = await getDoc(doc(db, "cafes", id));
+              return { id, name: s.exists() ? (s.data().name ?? "İsimsiz şube") : "İsimsiz şube" };
+            })
+          );
+          setBranchCafes(list);
+
+          if (list.length === 1) {
+            await loadCafeById(list[0].id);
+          } else {
+            setShowBranchSelector(true);
+            setLoading(false);
+          }
+        } else {
+          // Tek kafeli owner — mevcut akış
+          const cafeSnap = await getDocs(
+            query(collection(db, "cafes"), where("ownerUid", "==", user.uid))
+          );
+          if (cafeSnap.empty) {
+            setErrorText("Bu kullanıcıya ait kafe bulunamadı.");
+            setLoading(false);
+            return;
+          }
+          await loadCafeById(cafeSnap.docs[0].id);
         }
-
-        const cafeDoc = cafeSnap.docs[0];
-        const cafeData = cafeDoc.data();
-
-        setCafeId(cafeDoc.id);
-
-        setBusinessForm({
-          cafeId: cafeDoc.id,
-          cafeName: cafeData?.name ?? "",
-          category: cafeData?.category ?? "",
-          phone: cafeData?.phone ?? "",
-          address: cafeData?.address ?? "",
-          location: formatLocationValue(cafeData?.location ?? ""),
-          openTime: cafeData?.openTime ?? "",
-          closeTime: cafeData?.closeTime ?? "",
-          logoUrl: cafeData?.logoUrl ?? "",
-          description: cafeData?.description ?? "",
-          isOpen: cafeData?.isActive ?? false,
-          isVisible: cafeData?.isVisible ?? false,
-          approvalStatus: cafeData?.approvalStatus ?? "draft",
-          rejectionNote: cafeData?.rejectionNote ?? "",
-        });
-
-        const cards = Array.isArray(cafeData?.loyaltyCards) ? cafeData.loyaltyCards : [];
-        setLoyaltyCardsCount(cards.length);
-
-        // Çalışma saatleri kontrolü: workingHours objesi veya eski openTime/closeTime
-        const wh = cafeData?.workingHours;
-        const hasWH = wh && typeof wh === "object"
-          ? Object.values(wh).some((d: any) => d?.isOpen === true)
-          : !!(cafeData?.openTime && cafeData?.closeTime);
-        setHasWorkingHours(hasWH);
-
-        const firstCard = cards[0] ?? null;
-        setLoyaltyForm({
-          rewardBuy: firstCard?.rewardBuy ?? cafeData?.rewardBuy ?? 0,
-          rewardGift: firstCard?.rewardGift ?? cafeData?.rewardGift ?? 0,
-          programDescription: firstCard?.programDescription ?? cafeData?.programDescription ?? "",
-          productImageUrl: firstCard?.productImageUrl ?? cafeData?.productImageUrl ?? "",
-        });
-
-        setLastUpdatedText(
-          formatTimestamp((cafeData?.updatedAt as Timestamp) ?? null)
-        );
       } catch (error) {
         console.error("DASHBOARD LOAD ERROR:", error);
         setErrorText("Veriler yüklenirken hata oluştu.");
-      } finally {
         setLoading(false);
       }
     });
@@ -249,6 +287,28 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleRequestBranch() {
+    if (pendingBranchRequest) return;
+    setRequestingBranch(true);
+    setBranchRequestMessage("");
+    try {
+      await addDoc(collection(db, "pendingBranchRequests"), {
+        ownerUid: uid,
+        cafeName: businessForm.cafeName,
+        chainId: chain?.id ?? null,
+        status: "pending",
+        requestedAt: serverTimestamp(),
+      });
+      setPendingBranchRequest(true);
+      setBranchRequestMessage("Talebiniz alındı. Admin onayladıktan sonra yeni şube panelinize eklenecek.");
+    } catch (err) {
+      console.error(err);
+      setBranchRequestMessage("Talep gönderilirken hata oluştu.");
+    } finally {
+      setRequestingBranch(false);
+    }
+  }
+
   function renderPage() {
     switch (activePage) {
       case "dashboard":
@@ -271,6 +331,7 @@ export default function DashboardPage() {
           <LoyaltyTab
             cafeId={cafeId}
             businessForm={businessForm}
+            chainId={chain?.id}
           />
         );
 
@@ -288,7 +349,17 @@ export default function DashboardPage() {
         return <ReportsTab />;
 
       case "settings":
-        return <SettingsTab uid={uid} cafeId={cafeId} />;
+        return (
+          <SettingsTab
+            uid={uid}
+            cafeId={cafeId}
+            chain={chain}
+            pendingBranchRequest={pendingBranchRequest}
+            requestingBranch={requestingBranch}
+            branchRequestMessage={branchRequestMessage}
+            onRequestBranch={handleRequestBranch}
+          />
+        );
 
       default:
         return null;
@@ -299,6 +370,43 @@ export default function DashboardPage() {
     return (
       <main className="flex min-h-screen items-center justify-center">
         Panel yükleniyor...
+      </main>
+    );
+  }
+
+  // Zincir sahibi — şube seçim ekranı
+  if (showBranchSelector) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f6f8fa] p-6">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">LoopyGo</p>
+          <h1 className="mt-2 text-xl font-bold text-slate-900">Hangi şubeyi yönetmek istiyorsunuz?</h1>
+          {chain && (
+            <p className="mt-1 text-sm text-slate-500">{chain.name}</p>
+          )}
+          <div className="mt-6 space-y-3">
+            {branchCafes.map((branch) => (
+              <button
+                key={branch.id}
+                onClick={async () => {
+                  setShowBranchSelector(false);
+                  setLoading(true);
+                  await loadCafeById(branch.id);
+                }}
+                className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-sm font-semibold text-slate-900 transition hover:border-emerald-500 hover:bg-emerald-50"
+              >
+                <span>{branch.name || "İsimsiz şube"}</span>
+                <span className="text-slate-400">→</span>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => signOut(auth)}
+            className="mt-6 w-full rounded-2xl border border-slate-200 py-3 text-xs font-medium text-slate-500 transition hover:bg-slate-50"
+          >
+            Çıkış yap
+          </button>
+        </div>
       </main>
     );
   }

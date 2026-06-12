@@ -19,6 +19,8 @@ import {
   writeBatch,
   addDoc,
   deleteDoc,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import {
   ref,
@@ -97,6 +99,27 @@ type PendingUser = {
   fullName: string;
   email: string;
   createdAtText: string;
+};
+
+type ChainItem = {
+  id: string;
+  name: string;
+  branchCafeIds: string[];
+  ownerUid: string;
+  loyaltyCard: {
+    itemTypeId: string;
+    rewardBuy: number;
+    rewardGift: number;
+    programDescription: string;
+  } | null;
+};
+
+type BranchRequest = {
+  id: string;
+  ownerUid: string;
+  cafeName: string;
+  chainId: string | null;
+  requestedAtText: string;
 };
 
 // ─────────────────────────────────────────────
@@ -237,6 +260,22 @@ export default function AdminPage() {
   const [itemTypeMessage, setItemTypeMessage] = useState("");
   const [itemTypeError, setItemTypeError] = useState("");
   const [deletingItemTypeId, setDeletingItemTypeId] = useState("");
+
+  // ── Zincir state ──
+  const [chains, setChains] = useState<ChainItem[]>([]);
+  const [chainName, setChainName] = useState("");
+  const [chainSelectedCafeIds, setChainSelectedCafeIds] = useState<string[]>([]);
+  const [savingChain, setSavingChain] = useState(false);
+  const [chainMessage, setChainMessage] = useState("");
+  const [chainError, setChainError] = useState("");
+  const [deletingChainId, setDeletingChainId] = useState("");
+
+  // ── Şube Talepleri state ──
+  const [branchRequests, setBranchRequests] = useState<BranchRequest[]>([]);
+  const [approvingBranchId, setApprovingBranchId] = useState("");
+  const [rejectingBranchId, setRejectingBranchId] = useState("");
+  const [branchRequestMessage, setBranchRequestMessage] = useState("");
+  const [branchRequestError, setBranchRequestError] = useState("");
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
@@ -411,6 +450,53 @@ export default function AdminPage() {
           setItemTypes(next);
         });
 
+        // ── Şube Talepleri ──
+        const branchReqQuery = query(
+          collection(db, "pendingBranchRequests"),
+          where("status", "==", "pending")
+        );
+        const unsubBranchRequests = onSnapshot(branchReqQuery, (snap) => {
+          const next: BranchRequest[] = snap.docs.map((item) => {
+            const d = item.data() as Record<string, unknown>;
+            const requestedAt = d.requestedAt as { seconds?: number } | undefined;
+            let requestedAtText = "-";
+            if (requestedAt?.seconds) {
+              requestedAtText = new Date(requestedAt.seconds * 1000).toLocaleString("tr-TR");
+            }
+            return {
+              id: item.id,
+              ownerUid: safeString(d.ownerUid),
+              cafeName: safeString(d.cafeName) || "İsimsiz mağaza",
+              chainId: safeString(d.chainId) || null,
+              requestedAtText,
+            };
+          });
+          setBranchRequests(next);
+        });
+
+        // ── Zincirler ──
+        const unsubChains = onSnapshot(collection(db, "chains"), (snap) => {
+          const next: ChainItem[] = snap.docs.map((item) => {
+            const d = item.data() as Record<string, unknown>;
+            const lc = d.loyaltyCard as Record<string, unknown> | null | undefined;
+            return {
+              id: item.id,
+              name: safeString(d.name),
+              ownerUid: safeString(d.ownerUid),
+              branchCafeIds: Array.isArray(d.branchCafeIds) ? (d.branchCafeIds as string[]) : [],
+              loyaltyCard: lc
+                ? {
+                    itemTypeId: safeString(lc.itemTypeId),
+                    rewardBuy: safeNum(lc.rewardBuy),
+                    rewardGift: safeNum(lc.rewardGift),
+                    programDescription: safeString(lc.programDescription),
+                  }
+                : null,
+            };
+          });
+          setChains(next);
+        });
+
         // ── Bekleyen Başvurular ──
         const pendingQuery = query(
           collection(db, "users"),
@@ -442,6 +528,8 @@ export default function AdminPage() {
           unsubCampaigns();
           unsubAdminStory();
           unsubItemTypes();
+          unsubBranchRequests();
+          unsubChains();
           unsubPending();
           unsubAppLogo();
         };
@@ -1179,6 +1267,187 @@ export default function AdminPage() {
     }
   }
 
+  // ── Zincir oluştur ──
+  async function handleCreateChain() {
+    setChainMessage("");
+    setChainError("");
+
+    if (!chainName.trim()) { setChainError("Zincir adı boş olamaz."); return; }
+    if (chainSelectedCafeIds.length === 0) { setChainError("En az bir şube seçmelisin."); return; }
+
+    const ownerCafe = cafes.find((c) => c.id === chainSelectedCafeIds[0]);
+    if (!ownerCafe) { setChainError("Seçili kafe bulunamadı."); return; }
+
+    setSavingChain(true);
+    try {
+      await addDoc(collection(db, "chains"), {
+        name: chainName.trim(),
+        ownerUid: ownerCafe.ownerUid,
+        branchCafeIds: chainSelectedCafeIds,
+        loyaltyCard: null,
+        createdAt: serverTimestamp(),
+        createdBy: adminUid,
+      });
+      setChainName("");
+      setChainSelectedCafeIds([]);
+      setChainMessage("Zincir başarıyla oluşturuldu.");
+    } catch (err) {
+      console.error(err);
+      setChainError("Zincir oluşturulurken hata oluştu.");
+    } finally {
+      setSavingChain(false);
+    }
+  }
+
+  // ── Zincirden şube ekle ──
+  async function handleAddBranchToChain(chainId: string, cafeId: string) {
+    try {
+      await updateDoc(doc(db, "chains", chainId), {
+        branchCafeIds: arrayUnion(cafeId),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error(err);
+      setChainError("Şube eklenirken hata oluştu.");
+    }
+  }
+
+  // ── Zincirden şube çıkar ──
+  async function handleRemoveBranchFromChain(chainId: string, cafeId: string) {
+    try {
+      await updateDoc(doc(db, "chains", chainId), {
+        branchCafeIds: arrayRemove(cafeId),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error(err);
+      setChainError("Şube çıkarılırken hata oluştu.");
+    }
+  }
+
+  // ── Zincir sil ──
+  async function handleDeleteChain(chainId: string, chainNameText: string) {
+    if (!confirm(`"${chainNameText}" zincirini silmek istediğinden emin misin?\n\nŞubeler silinmez, sadece zincir kaydı kaldırılır.`)) return;
+    setDeletingChainId(chainId);
+    setChainError("");
+    try {
+      await deleteDoc(doc(db, "chains", chainId));
+      setChainMessage("Zincir silindi.");
+    } catch (err) {
+      console.error(err);
+      setChainError("Zincir silinirken hata oluştu.");
+    } finally {
+      setDeletingChainId("");
+    }
+  }
+
+  // ── Şube Talebi Onayla ──
+  async function handleApproveBranchRequest(req: BranchRequest) {
+    setApprovingBranchId(req.id);
+    setBranchRequestMessage("");
+    setBranchRequestError("");
+
+    try {
+      // 1. Sahibin mevcut kafelerini bul
+      const ownerCafesSnap = await getDocs(
+        query(collection(db, "cafes"), where("ownerUid", "==", req.ownerUid))
+      );
+      const existingCafeId = ownerCafesSnap.docs[0]?.id ?? null;
+
+      // 2. Yeni cafe oluştur (aynı ownerUid)
+      const newCafeRef = doc(collection(db, "cafes"));
+      const batch = writeBatch(db);
+      batch.set(newCafeRef, {
+        ownerUid: req.ownerUid,
+        name: "",
+        category: "",
+        openTime: "",
+        closeTime: "",
+        rewardBuy: 0,
+        rewardGift: 0,
+        locationText: "",
+        logoUrl: "",
+        isActive: true,
+        isVisible: false,
+        isProfileCompleted: false,
+        approvalStatus: "draft",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: adminUid,
+      });
+
+      // 3. Chain var mı?
+      const existingChainSnap = await getDocs(
+        query(collection(db, "chains"), where("ownerUid", "==", req.ownerUid))
+      );
+
+      if (!existingChainSnap.empty) {
+        // Chain var → yeni cafeyi ekle
+        const existingChain = existingChainSnap.docs[0];
+        batch.update(doc(db, "chains", existingChain.id), {
+          branchCafeIds: arrayUnion(newCafeRef.id),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Chain yok → oluştur, eski loyalty kartı kopyala
+        const firstCafeData = ownerCafesSnap.docs[0]?.data() ?? null;
+        const existingCard = firstCafeData?.loyaltyCards?.[0] ?? null;
+
+        const newChainRef = doc(collection(db, "chains"));
+        batch.set(newChainRef, {
+          ownerUid: req.ownerUid,
+          name: req.cafeName,
+          branchCafeIds: existingCafeId ? [existingCafeId, newCafeRef.id] : [newCafeRef.id],
+          loyaltyCard: existingCard
+            ? {
+                itemTypeId: existingCard.itemTypeId ?? "",
+                rewardBuy: existingCard.rewardBuy ?? 0,
+                rewardGift: existingCard.rewardGift ?? 0,
+                programDescription: existingCard.programDescription ?? "",
+                productImageUrl: existingCard.productImageUrl ?? "",
+              }
+            : null,
+          createdAt: serverTimestamp(),
+          createdBy: adminUid,
+        });
+      }
+
+      // 4. Talebi kapat
+      batch.update(doc(db, "pendingBranchRequests", req.id), {
+        status: "approved",
+        updatedAt: serverTimestamp(),
+      });
+
+      await batch.commit();
+      setBranchRequestMessage("Şube onaylandı. Yeni kafe oluşturuldu ve zincire eklendi.");
+    } catch (error) {
+      console.error(error);
+      setBranchRequestError("Şube onaylanırken hata oluştu.");
+    } finally {
+      setApprovingBranchId("");
+    }
+  }
+
+  // ── Şube Talebi Reddet ──
+  async function handleRejectBranchRequest(req: BranchRequest) {
+    if (!confirm(`"${req.cafeName}" için gelen şube talebini reddetmek istiyor musunuz?`)) return;
+    setRejectingBranchId(req.id);
+    setBranchRequestMessage("");
+    setBranchRequestError("");
+    try {
+      await updateDoc(doc(db, "pendingBranchRequests", req.id), {
+        status: "rejected",
+        updatedAt: serverTimestamp(),
+      });
+      setBranchRequestMessage("Talep reddedildi.");
+    } catch (error) {
+      console.error(error);
+      setBranchRequestError("Talep reddedilirken hata oluştu.");
+    } finally {
+      setRejectingBranchId("");
+    }
+  }
+
   // ── Başvuru Onayla ──
   async function handleApproveUser(pendingUser: PendingUser) {
     setApprovingUid(pendingUser.uid);
@@ -1393,6 +1662,72 @@ export default function AdminPage() {
             <p className="mt-2 text-2xl font-bold text-slate-900">{stats.drafts}</p>
           </div>
         </section>
+
+        {/* ── Şube Talepleri ── */}
+        {branchRequests.length > 0 && (
+          <section className={cardClassName()}>
+            <div className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Şube Talepleri</p>
+                <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-sm font-semibold text-orange-700">
+                  {branchRequests.length}
+                </span>
+              </div>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">Yeni şube / zincir başvuruları</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Onaylandığında yeni kafe oluşturulur ve mevcut zincire eklenir (yoksa zincir kurulur).
+              </p>
+            </div>
+            <div className="p-6 space-y-3">
+              {branchRequestError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{branchRequestError}</div>
+              )}
+              {branchRequestMessage && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{branchRequestMessage}</div>
+              )}
+              {branchRequests.map((req) => {
+                const ownerCafe = cafes.find((c) => c.ownerUid === req.ownerUid);
+                const hasChain = chains.some((ch) => ch.ownerUid === req.ownerUid);
+                return (
+                  <div key={req.id} className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900">{req.cafeName}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {hasChain ? "Mevcut zincire şube ekle" : "Yeni zincir oluştur"}
+                        </p>
+                        {ownerCafe && (
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            Mevcut mağaza: {ownerCafe.name || "İsimsiz"} · {ownerCafe.ownerEmail || req.ownerUid.slice(0, 10)}
+                          </p>
+                        )}
+                        <p className="mt-0.5 text-xs text-slate-400">Talep: {req.requestedAtText}</p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveBranchRequest(req)}
+                          disabled={approvingBranchId === req.id}
+                          className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                          {approvingBranchId === req.id ? "Onaylanıyor..." : "Onayla"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectBranchRequest(req)}
+                          disabled={rejectingBranchId === req.id}
+                          className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                        >
+                          {rejectingBranchId === req.id ? "Reddediliyor..." : "Reddet"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* ── Bekleyen Başvurular ── */}
         {pendingUsers.length > 0 && (
@@ -2621,6 +2956,198 @@ export default function AdminPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* ── Zincir Yönetimi ── */}
+        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+
+          {/* Zincir oluştur */}
+          <section className={cardClassName()}>
+            <div className="border-b border-slate-200 px-6 py-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Zincir Yönetimi</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">Yeni zincir oluştur</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Birden fazla şubesi olan işletmeler için zincir tanımla. Şubelerin aynı sadakat kartını paylaşmasını sağlar.
+              </p>
+            </div>
+            <div className="space-y-5 p-6">
+
+              {chainError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {chainError}
+                </div>
+              )}
+              {chainMessage && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                  {chainMessage}
+                </div>
+              )}
+
+              <div>
+                <label className={labelClassName()}>Zincir Adı *</label>
+                <input
+                  value={chainName}
+                  onChange={(e) => setChainName(e.target.value)}
+                  placeholder="Örn. Kahve Dünyası Zinciri"
+                  className={inputClassName()}
+                />
+              </div>
+
+              <div>
+                <label className={labelClassName()}>
+                  Şubeler *
+                  {chainSelectedCafeIds.length > 0 && (
+                    <span className="ml-2 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">
+                      {chainSelectedCafeIds.length} seçildi
+                    </span>
+                  )}
+                </label>
+                {cafes.length === 0 ? (
+                  <p className="mt-1.5 text-xs text-slate-400">Henüz onaylı kafe yok.</p>
+                ) : (
+                  <div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
+                    {cafes.map((cafe) => (
+                      <label key={cafe.id} className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={chainSelectedCafeIds.includes(cafe.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setChainSelectedCafeIds((prev) => [...prev, cafe.id]);
+                            } else {
+                              setChainSelectedCafeIds((prev) => prev.filter((id) => id !== cafe.id));
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-sm text-slate-800">{cafe.name || "İsimsiz kafe"}</span>
+                          <span className="ml-2 text-xs text-slate-400">{cafe.ownerEmail || cafe.ownerUid.slice(0, 8)}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-1.5 text-xs text-slate-400">
+                  Seçilen şubelerin ilk kaydının sahibi (ownerUid) zincir sahibi olarak atanır.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCreateChain}
+                disabled={savingChain}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingChain ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Oluşturuluyor...
+                  </>
+                ) : (
+                  "Zinciri Oluştur"
+                )}
+              </button>
+            </div>
+          </section>
+
+          {/* Zincir listesi */}
+          <section className={cardClassName()}>
+            <div className="border-b border-slate-200 px-6 py-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Mevcut Zincirler</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                Tüm zincirler
+                <span className="ml-2 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-sm font-semibold text-orange-700">
+                  {chains.length}
+                </span>
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Zincirdeki şubeleri yönet, şube ekle veya çıkar.
+              </p>
+            </div>
+            <div className="p-6">
+              {chains.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Henüz zincir oluşturulmadı.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {chains.map((chain) => {
+                    const branchCafes = cafes.filter((c) => chain.branchCafeIds.includes(c.id));
+                    const nonBranchCafes = cafes.filter(
+                      (c) => !chain.branchCafeIds.includes(c.id) && c.ownerUid === chain.ownerUid
+                    );
+
+                    return (
+                      <div key={chain.id} className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-900">{chain.name}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              Owner UID: {chain.ownerUid.slice(0, 16)}…
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {chain.branchCafeIds.length} şube
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteChain(chain.id, chain.name)}
+                            disabled={deletingChainId === chain.id}
+                            className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                          >
+                            {deletingChainId === chain.id ? "Siliniyor..." : "Zinciri Sil"}
+                          </button>
+                        </div>
+
+                        {/* Mevcut şubeler */}
+                        {branchCafes.length > 0 && (
+                          <div className="mt-3">
+                            <p className="mb-2 text-xs font-semibold text-slate-600">Şubeler</p>
+                            <div className="space-y-1.5">
+                              {branchCafes.map((cafe) => (
+                                <div key={cafe.id} className="flex items-center justify-between rounded-xl border border-orange-200 bg-white px-3 py-2">
+                                  <span className="text-xs font-medium text-slate-800">{cafe.name || "İsimsiz kafe"}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveBranchFromChain(chain.id, cafe.id)}
+                                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                                  >
+                                    Çıkar
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Eklenebilir şubeler (aynı ownerUid'e ait ama henüz zincirde olmayanlar) */}
+                        {nonBranchCafes.length > 0 && (
+                          <div className="mt-3">
+                            <p className="mb-2 text-xs font-semibold text-slate-400">Eklenebilir şubeler</p>
+                            <div className="space-y-1.5">
+                              {nonBranchCafes.map((cafe) => (
+                                <div key={cafe.id} className="flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2">
+                                  <span className="text-xs text-slate-500">{cafe.name || "İsimsiz kafe"}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddBranchToChain(chain.id, cafe.id)}
+                                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                                  >
+                                    Ekle
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -60,9 +60,10 @@ function generateId() {
 type Props = {
   cafeId: string;
   businessForm: BusinessForm;
+  chainId?: string;
 };
 
-export default function LoyaltyTab({ cafeId, businessForm }: Props) {
+export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   // Kartlar — cafes/{cafeId}.loyaltyCards array'inden gelir
   const [cards, setCards] = useState<LoyaltyCard[]>([]);
 
@@ -83,15 +84,33 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
   const functions = getFunctions(undefined, "europe-west1");
 
   // ==========================================
-  // Café dökümanındaki loyaltyCards array'ini dinle
+  // Kartları dinle — zincir modunda chain dökümanından, değilse cafe'den
   // ==========================================
   useEffect(() => {
+    if (chainId) {
+      return onSnapshot(doc(db, "chains", chainId), (snap) => {
+        const lc = snap.data()?.loyaltyCard ?? null;
+        if (lc) {
+          setCards([{
+            id: "chain-card",
+            position: 1,
+            itemTypeId: lc.itemTypeId ?? "",
+            rewardBuy: lc.rewardBuy ?? 0,
+            rewardGift: lc.rewardGift ?? 0,
+            programDescription: lc.programDescription ?? "",
+            productImageUrl: lc.productImageUrl ?? "",
+          }]);
+        } else {
+          setCards([]);
+        }
+      });
+    }
     if (!cafeId) return;
     return onSnapshot(doc(db, "cafes", cafeId), (snap) => {
       const raw: LoyaltyCard[] = snap.data()?.loyaltyCards ?? [];
       setCards([...raw].sort((a, b) => a.position - b.position));
     });
-  }, [cafeId]);
+  }, [cafeId, chainId]);
 
   // ==========================================
   // Pending tokens
@@ -118,13 +137,31 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
   }, [cafeId]);
 
   // ==========================================
-  // Array'i Firestore'a yaz (tek updateDoc)
+  // Kartları Firestore'a yaz
+  // Zincir modunda: chains/{chainId}.loyaltyCard (tek obje)
+  // Tek kafe modunda: cafes/{cafeId}.loyaltyCards (array)
   // ==========================================
   async function persistCards(newCards: LoyaltyCard[]) {
-    await updateDoc(doc(db, "cafes", cafeId), {
-      loyaltyCards: newCards,
-      updatedAt: serverTimestamp(),
-    });
+    if (chainId) {
+      const card = newCards[0] ?? null;
+      await updateDoc(doc(db, "chains", chainId), {
+        loyaltyCard: card
+          ? {
+              itemTypeId: card.itemTypeId,
+              rewardBuy: card.rewardBuy,
+              rewardGift: card.rewardGift,
+              programDescription: card.programDescription,
+              productImageUrl: card.productImageUrl ?? "",
+            }
+          : null,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(doc(db, "cafes", cafeId), {
+        loyaltyCards: newCards,
+        updatedAt: serverTimestamp(),
+      });
+    }
   }
 
   // ==========================================
@@ -318,6 +355,7 @@ export default function LoyaltyTab({ cafeId, businessForm }: Props) {
       setIsCreatingQR(true);
       const docRef = await addDoc(collection(db, "qrTokens"), {
         cafeId,
+        chainId: chainId ?? null,
         userId: null,
         type: "stamp",
         status: "pending",
