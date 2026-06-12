@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { LogOut, ArrowLeftRight } from "lucide-react";
 import type { NavId, NavItem } from "./types";
 
 type Props = {
@@ -11,6 +11,8 @@ type Props = {
   category: string;
   logoUrl: string;
   onLogout: () => void;
+  showSwitchBranch?: boolean;
+  onSwitchBranch?: () => void;
 };
 
 export default function DashboardSidebar({
@@ -21,6 +23,8 @@ export default function DashboardSidebar({
   category,
   logoUrl,
   onLogout,
+  showSwitchBranch,
+  onSwitchBranch,
 }: Props) {
   const initials = (cafeName || "K")
     .split(" ")
@@ -76,7 +80,17 @@ export default function DashboardSidebar({
           })}
         </nav>
 
-        <div className="mt-auto">
+        <div className="mt-auto space-y-2">
+          {showSwitchBranch && onSwitchBranch && (
+            <button
+              type="button"
+              onClick={onSwitchBranch}
+              className="inline-flex w-full items-center gap-2 rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-white/5"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              Şube Değiştir
+            </button>
+          )}
           <button
             type="button"
             onClick={onLogout}
