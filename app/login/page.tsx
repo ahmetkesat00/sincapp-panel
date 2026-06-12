@@ -26,12 +26,36 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      let credential;
+      try {
+        credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      } catch (authErr: unknown) {
+        const code = (authErr as { code?: string }).code;
+        if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
+          setErrorText("Email veya şifre hatalı.");
+        } else if (code === "auth/too-many-requests") {
+          setErrorText("Çok fazla başarısız giriş denemesi. Lütfen biraz bekleyin.");
+        } else {
+          setErrorText("Giriş yapılırken hata oluştu. Lütfen tekrar deneyin.");
+        }
+        setLoading(false);
+        return;
+      }
+
       const user = credential.user;
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
+      let userSnap;
+      try {
+        userSnap = await getDoc(doc(db, "users", user.uid));
+      } catch {
+        await auth.signOut();
+        setErrorText("Hesap bilgilerinize erişilemiyor. Lütfen destek ile iletişime geçin.");
+        setLoading(false);
+        return;
+      }
 
       if (!userSnap.exists()) {
+        await auth.signOut();
         setErrorText("Kullanıcı kaydı bulunamadı.");
         setLoading(false);
         return;
@@ -49,7 +73,7 @@ export default function LoginPage() {
       }
     } catch (err: unknown) {
       console.error(err);
-      setErrorText("Email veya şifre hatalı.");
+      setErrorText("Beklenmedik bir hata oluştu. Lütfen tekrar deneyin.");
     } finally {
       setLoading(false);
     }
