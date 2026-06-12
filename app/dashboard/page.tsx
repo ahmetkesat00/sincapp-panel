@@ -491,6 +491,8 @@ export default function DashboardPage() {
           category={businessForm.category}
           logoUrl={businessForm.logoUrl}
           onLogout={() => signOut(auth)}
+          showSwitchBranch={branchCafes.length > 1}
+          onSwitchBranch={() => setShowBranchSelector(true)}
         />
       }
       header={
