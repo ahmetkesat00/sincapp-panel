@@ -347,7 +347,7 @@ export default function BusinessTab({ cafeId: cafeIdProp }: Props) {
       } finally {
         setLoading(false);
       }
-    });
+    })();
 
     return () => { active = false; };
   }, [cafeIdProp]);
