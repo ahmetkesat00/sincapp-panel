@@ -94,6 +94,12 @@ type ItemType = {
   order: number;
 };
 
+type CategoryItem = {
+  id: string;
+  name: string;
+  order: number;
+};
+
 type PendingUser = {
   uid: string;
   fullName: string;
@@ -260,6 +266,15 @@ export default function AdminPage() {
   const [itemTypeMessage, setItemTypeMessage] = useState("");
   const [itemTypeError, setItemTypeError] = useState("");
   const [deletingItemTypeId, setDeletingItemTypeId] = useState("");
+
+  // ── Kategoriler state ──
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryOrder, setCategoryOrder] = useState("1");
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [categoryMessage, setCategoryMessage] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [deletingCategoryId, setDeletingCategoryId] = useState("");
 
   // ── Zincir state ──
   const [chains, setChains] = useState<ChainItem[]>([]);
@@ -450,6 +465,23 @@ export default function AdminPage() {
           setItemTypes(next);
         });
 
+        // ── Kategoriler ──
+        const categoriesQuery = query(
+          collection(db, "categories"),
+          orderBy("order", "asc")
+        );
+        const unsubCategories = onSnapshot(categoriesQuery, (snap) => {
+          const next: CategoryItem[] = snap.docs.map((item) => {
+            const d = item.data() as Record<string, unknown>;
+            return {
+              id: item.id,
+              name: safeString(d.name),
+              order: safeNum(d.order, 999),
+            };
+          });
+          setCategories(next);
+        });
+
         // ── Şube Talepleri ──
         const branchReqQuery = query(
           collection(db, "pendingBranchRequests"),
@@ -528,6 +560,7 @@ export default function AdminPage() {
           unsubCampaigns();
           unsubAdminStory();
           unsubItemTypes();
+          unsubCategories();
           unsubBranchRequests();
           unsubChains();
           unsubPending();
@@ -1264,6 +1297,45 @@ export default function AdminPage() {
       setItemTypeError("Item türü silinirken hata oluştu.");
     } finally {
       setDeletingItemTypeId("");
+    }
+  }
+
+  // ── Kategori oluştur ──
+  async function handleCreateCategory() {
+    setCategoryMessage("");
+    setCategoryError("");
+    if (!categoryName.trim()) { setCategoryError("Kategori adı boş olamaz."); return; }
+    setSavingCategory(true);
+    try {
+      await addDoc(collection(db, "categories"), {
+        name: categoryName.trim(),
+        order: Number(categoryOrder) || 999,
+        createdAt: serverTimestamp(),
+        createdBy: adminUid,
+      });
+      setCategoryName("");
+      setCategoryOrder("1");
+      setCategoryMessage("Kategori başarıyla eklendi.");
+    } catch (err) {
+      console.error(err);
+      setCategoryError("Kategori eklenirken hata oluştu.");
+    } finally {
+      setSavingCategory(false);
+    }
+  }
+
+  // ── Kategori sil ──
+  async function handleDeleteCategory(categoryId: string) {
+    if (!confirm("Bu kategoriyi silmek istediğinden emin misin?")) return;
+    setDeletingCategoryId(categoryId);
+    try {
+      await deleteDoc(doc(db, "categories", categoryId));
+      setCategoryMessage("Kategori silindi.");
+    } catch (err) {
+      console.error(err);
+      setCategoryError("Kategori silinirken hata oluştu.");
+    } finally {
+      setDeletingCategoryId("");
     }
   }
 
@@ -2952,6 +3024,106 @@ export default function AdminPage() {
                           className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
                         >
                           {deletingItemTypeId === itemType.id ? "Siliniyor..." : "Sil"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* ── Kategori Yönetimi ── */}
+        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+
+          {/* Kategori ekle */}
+          <section className={cardClassName()}>
+            <div className="border-b border-slate-200 px-6 py-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Kategori Yönetimi</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">Yeni kategori ekle</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Kafe, Restoran, Tatlı gibi kategoriler ekle. Mağaza sahipleri bu listeden seçim yapar.
+              </p>
+            </div>
+            <div className="space-y-5 p-6">
+              {categoryError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{categoryError}</div>
+              )}
+              {categoryMessage && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{categoryMessage}</div>
+              )}
+              <div>
+                <label className={labelClassName()}>Kategori Adı *</label>
+                <input
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  placeholder="Örn. Kafe, Tatlı, Sokak Lezzetleri"
+                  className={inputClassName()}
+                />
+              </div>
+              <div>
+                <label className={labelClassName()}>Sıra (order)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={categoryOrder}
+                  onChange={(e) => setCategoryOrder(e.target.value)}
+                  className={inputClassName()}
+                />
+                <p className="mt-1.5 text-xs text-slate-400">Küçük sayı = önce gösterilir</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateCategory}
+                disabled={savingCategory}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingCategory ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Ekleniyor...
+                  </>
+                ) : "Kategori Ekle"}
+              </button>
+            </div>
+          </section>
+
+          {/* Kategori listesi */}
+          <section className={cardClassName()}>
+            <div className="border-b border-slate-200 px-6 py-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Mevcut Kategoriler</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                Tüm kategoriler
+                <span className="ml-2 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-sm font-semibold text-indigo-700">
+                  {categories.length}
+                </span>
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Mağaza sahipleri işletme yönetimi ekranında bu listeden seçim yapar.
+              </p>
+            </div>
+            <div className="p-6">
+              {categories.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                  Henüz kategori eklenmedi.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {categories.map((cat) => (
+                    <div key={cat.id} className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{cat.name}</p>
+                          <p className="mt-1 text-xs text-slate-600">Sıra: {cat.order}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          disabled={deletingCategoryId === cat.id}
+                          className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                        >
+                          {deletingCategoryId === cat.id ? "Siliniyor..." : "Sil"}
                         </button>
                       </div>
                     </div>

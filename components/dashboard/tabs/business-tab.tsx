@@ -14,6 +14,7 @@ import {
   GeoPoint,
   addDoc,
   deleteDoc,
+  orderBy,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes, deleteObject } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase";
@@ -58,17 +59,7 @@ const emptyForm: BusinessForm = {
   menuUrl: "",
 };
 
-const CATEGORIES = [
-  "Kahvehane",
-  "Kafe",
-  "Fast Food",
-  "Restoran",
-  "Pastane & Fırın",
-  "Dondurma",
-  "Büfe",
-  "Bar & Pub",
-  "Diğer",
-];
+const CATEGORIES_FALLBACK = ["Kafe", "Restoran", "Pastane & Fırın", "Diğer"];
 
 const FEATURE_LIST = [
   { key: "wifi", label: "WiFi", icon: "📶" },
@@ -166,6 +157,16 @@ export default function BusinessTab() {
   const [form, setForm] = useState<BusinessForm>(emptyForm);
   const [savedForm, setSavedForm] = useState<BusinessForm>(emptyForm);
   const [loading, setLoading] = useState(true);
+  const [categoryList, setCategoryList] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDocs(query(collection(db, "categories"), orderBy("order", "asc")))
+      .then((snap) => {
+        const names = snap.docs.map((d) => d.data().name as string).filter(Boolean);
+        setCategoryList(names.length > 0 ? names : CATEGORIES_FALLBACK);
+      })
+      .catch(() => setCategoryList(CATEGORIES_FALLBACK));
+  }, []);
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -1027,7 +1028,7 @@ export default function BusinessTab() {
                     className={inputClass()}
                   >
                     <option value="">— Kategori seç —</option>
-                    {CATEGORIES.map((cat) => (
+                    {categoryList.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
