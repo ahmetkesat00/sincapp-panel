@@ -22,7 +22,18 @@ import SectionTitle from "../ui/section-title";
 import { fieldClass, shellCardClass } from "../helpers";
 import type { BusinessForm, LoyaltyCard } from "../types";
 
-const ITEM_TYPES = ["Kahve", "Tatlı", "Pizza", "Hamburger", "Diğer"];
+const ITEM_TYPES: { value: string; label: string }[] = [
+  { value: "kahve",    label: "Kahve" },
+  { value: "cay",      label: "Çay" },
+  { value: "tatli",    label: "Tatlı" },
+  { value: "dondurma", label: "Dondurma" },
+  { value: "pizza",    label: "Pizza" },
+  { value: "burger",   label: "Burger" },
+  { value: "firin",    label: "Fırın" },
+  { value: "yemek",    label: "Yemek" },
+  { value: "icecek",   label: "İçecek" },
+  { value: "diger",    label: "Diğer" },
+];
 const MAX_CARDS = 1;
 
 type PendingToken = {
@@ -610,8 +621,8 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
                   >
                     <option value="">-- Item seçin --</option>
                     {ITEM_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
+                      <option key={t.value} value={t.value}>
+                        {t.label}
                       </option>
                     ))}
                   </select>
