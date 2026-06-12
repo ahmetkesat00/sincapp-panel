@@ -1748,6 +1748,28 @@ export default function AdminPage() {
         </div>
       </header>
 
+      {/* Sticky sekme navigasyonu */}
+      <nav className="sticky top-16 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2 sm:px-6">
+          {[
+            { label: "Kafeler", href: "#section-cafes" },
+            { label: "Şube Talepleri", href: "#section-branch-requests" },
+            { label: "Başvurular", href: "#section-pending" },
+            { label: "Zincir Yönetimi", href: "#section-chains" },
+            { label: "Kampanyalar", href: "#section-campaigns" },
+            { label: "Kategoriler", href: "#section-categories" },
+          ].map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
+      </nav>
+
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
 
         {/* Global mesajlar */}
@@ -1783,6 +1805,7 @@ export default function AdminPage() {
         </section>
 
         {/* ── Şube Talepleri ── */}
+        <div id="section-branch-requests" />
         {branchRequests.length > 0 && (
           <section className={cardClassName()}>
             <div className="border-b border-slate-200 px-6 py-5">
@@ -1849,6 +1872,7 @@ export default function AdminPage() {
         )}
 
         {/* ── Bekleyen Başvurular ── */}
+        <div id="section-pending" />
         {pendingUsers.length > 0 && (
           <section className={cardClassName()}>
             <div className="border-b border-slate-200 px-6 py-5">
@@ -2084,7 +2108,7 @@ export default function AdminPage() {
           </section>
 
           {/* Kafeler listesi */}
-          <section className={cardClassName()}>
+          <section id="section-cafes" className={cardClassName()}>
             <div className="border-b border-slate-200 px-6 py-5">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Kafeler</p>
               <h2 className="mt-1 text-lg font-semibold text-slate-900">Sistem kayıtları</h2>
@@ -2717,6 +2741,7 @@ export default function AdminPage() {
         </div>
 
         {/* ── Kampanya Yönetimi ── */}
+        <div id="section-campaigns" />
         <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
 
           {/* Kampanya oluştur */}
@@ -3082,6 +3107,7 @@ export default function AdminPage() {
         </div>
 
         {/* ── Kategori Yönetimi ── */}
+        <div id="section-categories" />
         <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
 
           {/* Kategori ekle */}
@@ -3182,7 +3208,7 @@ export default function AdminPage() {
         </div>
 
         {/* ── Zincir Yönetimi ── */}
-        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div id="section-chains" className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
 
           {/* Zincir oluştur */}
           <section className={cardClassName()}>
