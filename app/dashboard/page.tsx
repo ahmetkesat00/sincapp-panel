@@ -185,40 +185,52 @@ export default function DashboardPage() {
           return;
         }
 
-        // Bekleyen şube talebi var mı?
-        const branchReqSnap = await getDocs(
-          query(collection(db, "pendingBranchRequests"), where("ownerUid", "==", user.uid))
-        );
-        setPendingBranchRequest(
-          branchReqSnap.docs.some((d) => d.data().status === "pending")
-        );
-
-        // Zincir kontrolü — ownerUid'e ait chain var mı?
-        const chainSnap = await getDocs(
-          query(collection(db, "chains"), where("ownerUid", "==", user.uid))
-        );
-
-        if (!chainSnap.empty) {
-          const chainDoc = chainSnap.docs[0];
-          const chainData = chainDoc.data();
-          const branchIds: string[] = Array.isArray(chainData.branchCafeIds) ? chainData.branchCafeIds : [];
-          setChain({ id: chainDoc.id, name: chainData.name ?? "", branchCafeIds: branchIds });
-
-          const list = await Promise.all(
-            branchIds.map(async (id) => {
-              const s = await getDoc(doc(db, "cafes", id));
-              return { id, name: s.exists() ? (s.data().name ?? "İsimsiz şube") : "İsimsiz şube" };
-            })
+        // Bekleyen şube talebi var mı? (rules yoksa sessizce geç)
+        try {
+          const branchReqSnap = await getDocs(
+            query(collection(db, "pendingBranchRequests"), where("ownerUid", "==", user.uid))
           );
-          setBranchCafes(list);
+          setPendingBranchRequest(
+            branchReqSnap.docs.some((d) => d.data().status === "pending")
+          );
+        } catch {
+          // Firestore rules henüz eklenmemişse yoksay
+        }
 
-          if (list.length === 1) {
-            await loadCafeById(list[0].id);
-          } else {
-            setShowBranchSelector(true);
-            setLoading(false);
+        // Zincir kontrolü — ownerUid'e ait chain var mı? (rules yoksa sessizce geç)
+        let foundChain = false;
+        try {
+          const chainSnap = await getDocs(
+            query(collection(db, "chains"), where("ownerUid", "==", user.uid))
+          );
+
+          if (!chainSnap.empty) {
+            foundChain = true;
+            const chainDoc = chainSnap.docs[0];
+            const chainData = chainDoc.data();
+            const branchIds: string[] = Array.isArray(chainData.branchCafeIds) ? chainData.branchCafeIds : [];
+            setChain({ id: chainDoc.id, name: chainData.name ?? "", branchCafeIds: branchIds });
+
+            const list = await Promise.all(
+              branchIds.map(async (id) => {
+                const s = await getDoc(doc(db, "cafes", id));
+                return { id, name: s.exists() ? (s.data().name ?? "İsimsiz şube") : "İsimsiz şube" };
+              })
+            );
+            setBranchCafes(list);
+
+            if (list.length === 1) {
+              await loadCafeById(list[0].id);
+            } else {
+              setShowBranchSelector(true);
+              setLoading(false);
+            }
           }
-        } else {
+        } catch {
+          // Firestore rules henüz eklenmemişse yoksay
+        }
+
+        if (!foundChain) {
           // Tek kafeli owner — mevcut akış
           const cafeSnap = await getDocs(
             query(collection(db, "cafes"), where("ownerUid", "==", user.uid))
