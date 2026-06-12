@@ -220,6 +220,7 @@ export default function DashboardPage() {
 
             if (list.length === 1) {
               await loadCafeById(list[0].id);
+              if (chainData.loyaltyCard) setLoyaltyCardsCount(1);
             } else {
               setShowBranchSelector(true);
               setLoading(false);
@@ -410,6 +411,12 @@ export default function DashboardPage() {
                   setShowBranchSelector(false);
                   setLoading(true);
                   await loadCafeById(branch.id);
+                  if (chain) {
+                    try {
+                      const cs = await getDoc(doc(db, "chains", chain.id));
+                      if (cs.data()?.loyaltyCard) setLoyaltyCardsCount(1);
+                    } catch {}
+                  }
                 }}
                 className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-sm font-semibold text-slate-900 transition hover:border-emerald-500 hover:bg-emerald-50"
               >
