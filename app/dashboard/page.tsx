@@ -187,9 +187,11 @@ export default function DashboardPage() {
 
         // Bekleyen şube talebi var mı?
         const branchReqSnap = await getDocs(
-          query(collection(db, "pendingBranchRequests"), where("ownerUid", "==", user.uid), where("status", "==", "pending"))
+          query(collection(db, "pendingBranchRequests"), where("ownerUid", "==", user.uid))
         );
-        setPendingBranchRequest(!branchReqSnap.empty);
+        setPendingBranchRequest(
+          branchReqSnap.docs.some((d) => d.data().status === "pending")
+        );
 
         // Zincir kontrolü — ownerUid'e ait chain var mı?
         const chainSnap = await getDocs(
