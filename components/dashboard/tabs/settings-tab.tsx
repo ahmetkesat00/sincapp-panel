@@ -10,13 +10,14 @@ type Props = {
   uid: string;
   cafeId: string;
   chain: { id: string; name: string; branchCafeIds: string[] } | null;
-  pendingBranchRequest: boolean;
+  pendingBranchRequestCount: number;
   requestingBranch: boolean;
   branchRequestMessage: string;
-  onRequestBranch: () => void;
+  onRequestBranch: (count: number) => void;
 };
 
-export default function SettingsTab({ uid, cafeId, chain, pendingBranchRequest, requestingBranch, branchRequestMessage, onRequestBranch }: Props) {
+export default function SettingsTab({ uid, cafeId, chain, pendingBranchRequestCount, requestingBranch, branchRequestMessage, onRequestBranch }: Props) {
+  const [branchCount, setBranchCount] = useState(1);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -138,35 +139,65 @@ export default function SettingsTab({ uid, cafeId, chain, pendingBranchRequest, 
           title={chain ? `${chain.name} · ${chain.branchCafeIds.length} şube` : "Zincir İşletme"}
           description={
             chain
-              ? "Zincirinize yeni bir şube eklemek için talep gönderin. Admin onayladıktan sonra şube panelinize eklenir."
-              : "Birden fazla şubeniz mi var? Talep gönderin, admin onayladıktan sonra tüm şubelerinizi tek panelden yönetebilirsiniz."
+              ? "Zincirinize yeni şube eklemek için kaç şube istediğinizi seçin ve talep gönderin."
+              : "Birden fazla şubeniz mi var? Kaç şube eklemek istediğinizi seçin, admin onayladıktan sonra tek panelden yönetebilirsiniz."
           }
         />
-        <div className="p-6 space-y-3">
+        <div className="p-6 space-y-4">
           {branchRequestMessage && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
               {branchRequestMessage}
             </div>
           )}
-          {pendingBranchRequest ? (
+
+          {pendingBranchRequestCount > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
-              {chain ? "Şube talebiniz inceleniyor..." : "Zincir talebiniz inceleniyor..."}
+              {pendingBranchRequestCount} adet şube talebiniz inceleniyor...
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onRequestBranch}
-              disabled={requestingBranch}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {requestingBranch ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Gönderiliyor...
-                </>
-              ) : chain ? "Yeni Şube Talebi Gönder" : "Zincir Başvurusu Gönder"}
-            </button>
           )}
+
+          {/* Şube sayısı seçici */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Kaç yeni şube eklemek istiyorsunuz?
+            </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setBranchCount((c) => Math.max(1, c - 1))}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
+                disabled={branchCount <= 1}
+              >
+                −
+              </button>
+              <span className="w-8 text-center text-lg font-bold text-slate-900">{branchCount}</span>
+              <button
+                type="button"
+                onClick={() => setBranchCount((c) => Math.min(5, c + 1))}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
+                disabled={branchCount >= 5}
+              >
+                +
+              </button>
+              <span className="text-sm text-slate-400">(max 5)</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onRequestBranch(branchCount)}
+            disabled={requestingBranch}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {requestingBranch ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Gönderiliyor...
+              </>
+            ) : chain
+              ? `${branchCount} Yeni Şube Talebi Gönder`
+              : `Zincir Başvurusu Gönder (${branchCount} şube)`}
+          </button>
         </div>
       </section>
     </div>

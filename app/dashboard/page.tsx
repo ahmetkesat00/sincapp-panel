@@ -106,7 +106,7 @@ export default function DashboardPage() {
   const [chain, setChain] = useState<{ id: string; name: string; branchCafeIds: string[] } | null>(null);
   const [branchCafes, setBranchCafes] = useState<{ id: string; name: string }[]>([]);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
-  const [pendingBranchRequest, setPendingBranchRequest] = useState(false);
+  const [pendingBranchRequestCount, setPendingBranchRequestCount] = useState(0);
   const [requestingBranch, setRequestingBranch] = useState(false);
   const [branchRequestMessage, setBranchRequestMessage] = useState("");
 
@@ -185,14 +185,13 @@ export default function DashboardPage() {
           return;
         }
 
-        // Bekleyen şube talebi var mı? (rules yoksa sessizce geç)
+        // Bekleyen şube talepleri kaç tane? (rules yoksa sessizce geç)
         try {
           const branchReqSnap = await getDocs(
             query(collection(db, "pendingBranchRequests"), where("ownerUid", "==", user.uid))
           );
-          setPendingBranchRequest(
-            branchReqSnap.docs.some((d) => d.data().status === "pending")
-          );
+          const pendingCount = branchReqSnap.docs.filter((d) => d.data().status === "pending").length;
+          setPendingBranchRequestCount(pendingCount);
         } catch {
           // Firestore rules henüz eklenmemişse yoksay
         }
@@ -301,20 +300,25 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleRequestBranch() {
-    if (pendingBranchRequest) return;
+  async function handleRequestBranch(count: number) {
     setRequestingBranch(true);
     setBranchRequestMessage("");
     try {
-      await addDoc(collection(db, "pendingBranchRequests"), {
-        ownerUid: uid,
-        cafeName: businessForm.cafeName,
-        chainId: chain?.id ?? null,
-        status: "pending",
-        requestedAt: serverTimestamp(),
-      });
-      setPendingBranchRequest(true);
-      setBranchRequestMessage("Talebiniz alındı. Admin onayladıktan sonra yeni şube panelinize eklenecek.");
+      for (let i = 0; i < count; i++) {
+        await addDoc(collection(db, "pendingBranchRequests"), {
+          ownerUid: uid,
+          cafeName: businessForm.cafeName,
+          chainId: chain?.id ?? null,
+          status: "pending",
+          requestedAt: serverTimestamp(),
+        });
+      }
+      setPendingBranchRequestCount((prev) => prev + count);
+      setBranchRequestMessage(
+        count > 1
+          ? `${count} adet şube talebiniz alındı. Admin onayladıkça şubeler panelinize eklenir.`
+          : "Talebiniz alındı. Admin onayladıktan sonra yeni şube panelinize eklenecek."
+      );
     } catch (err) {
       console.error(err);
       setBranchRequestMessage("Talep gönderilirken hata oluştu.");
@@ -368,7 +372,7 @@ export default function DashboardPage() {
             uid={uid}
             cafeId={cafeId}
             chain={chain}
-            pendingBranchRequest={pendingBranchRequest}
+            pendingBranchRequestCount={pendingBranchRequestCount}
             requestingBranch={requestingBranch}
             branchRequestMessage={branchRequestMessage}
             onRequestBranch={handleRequestBranch}
