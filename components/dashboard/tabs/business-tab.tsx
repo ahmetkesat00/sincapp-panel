@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -17,8 +18,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes, deleteObject } from "firebase/storage";
-import { auth, db, storage } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { db, storage } from "@/lib/firebase";
 import ImageCropper from "../ui/image-cropper";
 import getCroppedImg from "@/lib/cropImage";
 import CircularCropTool from "../ui/circular-crop-tool";
@@ -153,7 +153,9 @@ function isStoryExpired(uploadedAt: unknown): boolean {
 // Component
 // ─────────────────────────────────────────────
 
-export default function BusinessTab() {
+type Props = { cafeId: string };
+
+export default function BusinessTab({ cafeId: cafeIdProp }: Props) {
   const [form, setForm] = useState<BusinessForm>(emptyForm);
   const [savedForm, setSavedForm] = useState<BusinessForm>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -237,23 +239,22 @@ export default function BusinessTab() {
 
   // ── Firestore'dan veri çek ──
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) { setLoading(false); return; }
+    if (!cafeIdProp) return;
+    let active = true;
 
+    (async () => {
       try {
-        const cafeQuery = query(
-          collection(db, "cafes"),
-          where("ownerUid", "==", user.uid)
-        );
-        const cafeSnap = await getDocs(cafeQuery);
+        const cafeDocSnap = await getDoc(doc(db, "cafes", cafeIdProp));
 
-        if (cafeSnap.empty) {
-          setErrorText("Bu kullanıcıya ait kafe bulunamadı.");
+        if (!active) return;
+
+        if (!cafeDocSnap.exists()) {
+          setErrorText("Kafe bulunamadı.");
           setLoading(false);
           return;
         }
 
-        const cafeDoc = cafeSnap.docs[0];
+        const cafeDoc = cafeDocSnap;
         const d = cafeDoc.data();
 
         const loaded: BusinessForm = {
@@ -348,8 +349,8 @@ export default function BusinessTab() {
       }
     });
 
-    return () => unsub();
-  }, []);
+    return () => { active = false; };
+  }, [cafeIdProp]);
 
   // Blob URL'leri temizle
   useEffect(() => {

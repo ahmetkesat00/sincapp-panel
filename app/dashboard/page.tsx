@@ -343,7 +343,7 @@ export default function DashboardPage() {
       case "business":
         // ✅ BusinessTab zaten circular crop tool'ü içeriyor!
         // business-tab-WITH-CROP.tsx kullan
-        return <BusinessTab />;
+        return <BusinessTab cafeId={cafeId} />;
 
       case "loyalty":
         return (
@@ -355,17 +355,16 @@ export default function DashboardPage() {
         );
 
       case "campaigns":
-        return <CampaignsTab />;
+        return <CampaignsTab cafeId={cafeId} />;
 
       case "events":
-        // 🎉 YENİ: EventsTab entegrasyonu
         return <EventsTab cafeId={cafeId} />;
 
       case "customers":
-        return <CustomersTab />;
+        return <CustomersTab cafeId={cafeId} />;
 
       case "reports":
-        return <ReportsTab />;
+        return <ReportsTab cafeId={cafeId} />;
 
       case "settings":
         return (

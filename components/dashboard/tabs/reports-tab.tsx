@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
 import {
   collectionGroup,
   collection,
@@ -11,7 +10,7 @@ import {
   orderBy,
   Timestamp,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 
 import SectionTitle from "../ui/section-title";
 import MiniBarChart from "../ui/mini-bar-chart";
@@ -110,10 +109,9 @@ function typeStyle(type: string): string {
 // Component
 // ─────────────────────────────────────────────
 
-export default function ReportsTab() {
+export default function ReportsTab({ cafeId }: { cafeId: string }) {
   const [loading, setLoading] = useState(true);
   const [txLoading, setTxLoading] = useState(false);
-  const [cafeId, setCafeId] = useState("");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [activeCampaigns, setActiveCampaigns] = useState<ChartDataItem[]>([]);
   const [totalStamps, setTotalStamps] = useState(0);
@@ -123,21 +121,16 @@ export default function ReportsTab() {
 
   // Özet ve müşteri verileri
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) { setLoading(false); return; }
+    if (!cafeId) return;
+    let active = true;
 
+    (async () => {
       try {
-        const cafeSnap = await getDocs(
-          query(collection(db, "cafes"), where("ownerUid", "==", user.uid))
-        );
-        if (cafeSnap.empty) { setLoading(false); return; }
-
-        const id = cafeSnap.docs[0].id;
-        setCafeId(id);
-
         const pointsSnap = await getDocs(
-          query(collectionGroup(db, "points"), where("cafeId", "==", id))
+          query(collectionGroup(db, "points"), where("cafeId", "==", cafeId))
         );
+
+        if (!active) return;
 
         let stamps = 0;
         let rewards = 0;
@@ -169,7 +162,7 @@ export default function ReportsTab() {
         setTotalStamps(stamps);
         setTotalRewards(rewards);
 
-        const campSnap = await getDocs(collection(db, "cafes", id, "campaigns"));
+        const campSnap = await getDocs(collection(db, "cafes", cafeId, "campaigns"));
         const campData: ChartDataItem[] = campSnap.docs.map((d) => ({
           label: d.id.slice(0, 8),
           value: d.data().isEnabled ? 1 : 0,
@@ -179,12 +172,12 @@ export default function ReportsTab() {
       } catch (err) {
         console.error("ReportsTab load error:", err);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    });
+    })();
 
-    return () => unsub();
-  }, []);
+    return () => { active = false; };
+  }, [cafeId]);
 
   // İşlem geçmişi — cafeId veya filtre değişince yeniden çek
   useEffect(() => {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   doc,
@@ -17,7 +16,7 @@ import {
   arrayRemove,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth, db, storage } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import SectionTitle from "../ui/section-title";
 import Toggle from "../ui/toggle";
 import { shellCardClass } from "../helpers";
@@ -52,8 +51,7 @@ type CustomCampaign = {
 // Component
 // ─────────────────────────────────────────────
 
-export default function CampaignsTab() {
-  const [cafeId, setCafeId] = useState("");
+export default function CampaignsTab({ cafeId }: { cafeId: string }) {
   const [loading, setLoading] = useState(true);
 
   // ── Global kampanya state ──
@@ -88,30 +86,16 @@ export default function CampaignsTab() {
 
   // ── Veri yükle ──
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+    if (!cafeId) return;
+    let active = true;
 
+    (async () => {
       try {
-        const cafeSnap = await getDocs(
-          query(collection(db, "cafes"), where("ownerUid", "==", user.uid))
-        );
-
-        if (cafeSnap.empty) {
-          setErrorText("Kafe bulunamadı.");
-          setLoading(false);
-          return;
-        }
-
-        const foundCafeId = cafeSnap.docs[0].id;
-        setCafeId(foundCafeId);
-
-        // Global kampanyalar
         const globalSnap = await getDocs(
           query(collection(db, "campaigns"), where("isActive", "==", true))
         );
+
+        if (!active) return;
 
         const globals: GlobalCampaign[] = globalSnap.docs
           .map((d) => {
@@ -127,13 +111,11 @@ export default function CampaignsTab() {
 
         setGlobalCampaigns(globals);
 
-        // Katılımlar
         const cafeSubSnap = await getDocs(
-          collection(db, "cafes", foundCafeId, "campaigns")
+          collection(db, "cafes", cafeId, "campaigns")
         );
 
         const activeGlobalIds = new Set(globals.map((g) => g.id));
-
         const enabled = new Set<string>();
         cafeSubSnap.docs.forEach((d) => {
           const data = d.data() as CafeCampaign;
@@ -143,18 +125,17 @@ export default function CampaignsTab() {
         setPendingIds(new Set(enabled));
         setInitialJoinedIds(new Set(enabled));
 
-        // Özel kampanyalar
-        await loadCustomCampaigns(foundCafeId);
+        await loadCustomCampaigns(cafeId);
       } catch (err) {
         console.error("CampaignsTab load error:", err);
         setErrorText("Veriler yüklenirken hata oluştu.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    });
+    })();
 
-    return () => unsub();
-  }, []);
+    return () => { active = false; };
+  }, [cafeId]);
 
   async function loadCustomCampaigns(cid: string) {
     const snap = await getDocs(

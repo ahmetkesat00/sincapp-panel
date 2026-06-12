@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
 import { collectionGroup, collection, query, where, getDocs } from "firebase/firestore";
 import { Search } from "lucide-react";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import SectionTitle from "../ui/section-title";
 import { shellCardClass } from "../helpers";
 
@@ -24,43 +23,29 @@ type CustomerRow = {
 // Component
 // ─────────────────────────────────────────────
 
-export default function CustomersTab() {
-  const [cafeId, setCafeId] = useState("");
+export default function CustomersTab({ cafeId }: { cafeId: string }) {
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [search, setSearch] = useState("");
   const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) { setLoading(false); return; }
+    if (!cafeId) return;
+    let active = true;
 
+    (async () => {
       try {
-        // Kafe bul
-        const cafeSnap = await getDocs(
-          query(collection(db, "cafes"), where("ownerUid", "==", user.uid))
-        );
-
-        if (cafeSnap.empty) {
-          setErrorText("Kafe bulunamadı.");
-          setLoading(false);
-          return;
-        }
-
-        const foundCafeId = cafeSnap.docs[0].id;
-        setCafeId(foundCafeId);
-
-        // 🔥 collectionGroup("points") ile tüm users/{uid}/points/{cafeId} çek
         const pointsSnap = await getDocs(
           query(
             collectionGroup(db, "points"),
-            where("cafeId", "==", foundCafeId)
+            where("cafeId", "==", cafeId)
           )
         );
 
+        if (!active) return;
+
         if (pointsSnap.empty) {
           setCustomers([]);
-          setLoading(false);
           return;
         }
 
@@ -106,12 +91,12 @@ export default function CustomersTab() {
         console.error("CustomersTab load error:", err);
         setErrorText("Veriler yüklenirken hata oluştu.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    });
+    })();
 
-    return () => unsub();
-  }, []);
+    return () => { active = false; };
+  }, [cafeId]);
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();
