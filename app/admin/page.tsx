@@ -21,6 +21,7 @@ import {
   deleteDoc,
   arrayUnion,
   arrayRemove,
+  deleteField,
 } from "firebase/firestore";
 import {
   ref,
@@ -1352,7 +1353,9 @@ export default function AdminPage() {
 
     setSavingChain(true);
     try {
-      await addDoc(collection(db, "chains"), {
+      const chainRef = doc(collection(db, "chains"));
+      const batch = writeBatch(db);
+      batch.set(chainRef, {
         name: chainName.trim(),
         ownerUid: ownerCafe.ownerUid,
         branchCafeIds: chainSelectedCafeIds,
@@ -1360,6 +1363,10 @@ export default function AdminPage() {
         createdAt: serverTimestamp(),
         createdBy: adminUid,
       });
+      for (const cId of chainSelectedCafeIds) {
+        batch.update(doc(db, "cafes", cId), { chainId: chainRef.id });
+      }
+      await batch.commit();
       setChainName("");
       setChainSelectedCafeIds([]);
       setChainMessage("Zincir başarıyla oluşturuldu.");
@@ -1374,10 +1381,13 @@ export default function AdminPage() {
   // ── Zincirden şube ekle ──
   async function handleAddBranchToChain(chainId: string, cafeId: string) {
     try {
-      await updateDoc(doc(db, "chains", chainId), {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "chains", chainId), {
         branchCafeIds: arrayUnion(cafeId),
         updatedAt: serverTimestamp(),
       });
+      batch.update(doc(db, "cafes", cafeId), { chainId });
+      await batch.commit();
     } catch (err) {
       console.error(err);
       setChainError("Şube eklenirken hata oluştu.");
@@ -1387,10 +1397,13 @@ export default function AdminPage() {
   // ── Zincirden şube çıkar ──
   async function handleRemoveBranchFromChain(chainId: string, cafeId: string) {
     try {
-      await updateDoc(doc(db, "chains", chainId), {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "chains", chainId), {
         branchCafeIds: arrayRemove(cafeId),
         updatedAt: serverTimestamp(),
       });
+      batch.update(doc(db, "cafes", cafeId), { chainId: deleteField() });
+      await batch.commit();
     } catch (err) {
       console.error(err);
       setChainError("Şube çıkarılırken hata oluştu.");
@@ -1398,12 +1411,17 @@ export default function AdminPage() {
   }
 
   // ── Zincir sil ──
-  async function handleDeleteChain(chainId: string, chainNameText: string) {
+  async function handleDeleteChain(chainId: string, chainNameText: string, branchCafeIds: string[]) {
     if (!confirm(`"${chainNameText}" zincirini silmek istediğinden emin misin?\n\nŞubeler silinmez, sadece zincir kaydı kaldırılır.`)) return;
     setDeletingChainId(chainId);
     setChainError("");
     try {
-      await deleteDoc(doc(db, "chains", chainId));
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "chains", chainId));
+      for (const cId of branchCafeIds) {
+        batch.update(doc(db, "cafes", cId), { chainId: deleteField() });
+      }
+      await batch.commit();
       setChainMessage("Zincir silindi.");
     } catch (err) {
       console.error(err);
@@ -1454,22 +1472,24 @@ export default function AdminPage() {
       );
 
       if (!existingChainSnap.empty) {
-        // Chain var → yeni cafeyi ekle
+        // Chain var → yeni cafeyi ekle + chainId yaz
         const existingChain = existingChainSnap.docs[0];
         batch.update(doc(db, "chains", existingChain.id), {
           branchCafeIds: arrayUnion(newCafeRef.id),
           updatedAt: serverTimestamp(),
         });
+        batch.update(newCafeRef, { chainId: existingChain.id });
       } else {
-        // Chain yok → oluştur, eski loyalty kartı kopyala
+        // Chain yok → oluştur, eski loyalty kartı kopyala, tüm şubelere chainId yaz
         const firstCafeData = ownerCafesSnap.docs[0]?.data() ?? null;
         const existingCard = firstCafeData?.loyaltyCards?.[0] ?? null;
 
         const newChainRef = doc(collection(db, "chains"));
+        const branchIds = existingCafeId ? [existingCafeId, newCafeRef.id] : [newCafeRef.id];
         batch.set(newChainRef, {
           ownerUid: req.ownerUid,
           name: req.cafeName,
-          branchCafeIds: existingCafeId ? [existingCafeId, newCafeRef.id] : [newCafeRef.id],
+          branchCafeIds: branchIds,
           loyaltyCard: existingCard
             ? {
                 itemTypeId: existingCard.itemTypeId ?? "",
@@ -1482,6 +1502,9 @@ export default function AdminPage() {
           createdAt: serverTimestamp(),
           createdBy: adminUid,
         });
+        for (const cId of branchIds) {
+          batch.update(doc(db, "cafes", cId), { chainId: newChainRef.id });
+        }
       }
 
       // 4. Talebi kapat
@@ -1497,6 +1520,30 @@ export default function AdminPage() {
       setBranchRequestError("Şube onaylanırken hata oluştu.");
     } finally {
       setApprovingBranchId("");
+    }
+  }
+
+  // ── Mevcut zincirler için chainId migration ──
+  async function handleMigrateChainIds() {
+    if (!confirm("Tüm mevcut zincir şubelerine chainId yazılacak. Devam?")) return;
+    setChainError("");
+    setChainMessage("");
+    try {
+      const snap = await getDocs(collection(db, "chains"));
+      const batch = writeBatch(db);
+      for (const chainDoc of snap.docs) {
+        const branchIds: string[] = Array.isArray(chainDoc.data().branchCafeIds)
+          ? chainDoc.data().branchCafeIds
+          : [];
+        for (const cId of branchIds) {
+          batch.update(doc(db, "cafes", cId), { chainId: chainDoc.id });
+        }
+      }
+      await batch.commit();
+      setChainMessage("Migration tamamlandı. Tüm şubelere chainId yazıldı.");
+    } catch (err) {
+      console.error(err);
+      setChainError("Migration sırasında hata oluştu.");
     }
   }
 
@@ -3159,6 +3206,18 @@ export default function AdminPage() {
                 </div>
               )}
 
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="mb-2 text-xs font-semibold text-amber-700">Tek seferlik migration</p>
+                <p className="mb-3 text-xs text-amber-600">Mevcut zincir şubelerine chainId alanını yazar. Yeni zincirler otomatik alır, sadece eskiler için çalıştırın.</p>
+                <button
+                  type="button"
+                  onClick={handleMigrateChainIds}
+                  className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                >
+                  Mevcut zincirlere chainId yaz
+                </button>
+              </div>
+
               <div>
                 <label className={labelClassName()}>Zincir Adı *</label>
                 <input
@@ -3268,7 +3327,7 @@ export default function AdminPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleDeleteChain(chain.id, chain.name)}
+                            onClick={() => handleDeleteChain(chain.id, chain.name, chain.branchCafeIds)}
                             disabled={deletingChainId === chain.id}
                             className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
                           >
