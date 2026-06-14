@@ -153,9 +153,9 @@ function isStoryExpired(uploadedAt: unknown): boolean {
 // Component
 // ─────────────────────────────────────────────
 
-type Props = { cafeId: string };
+type Props = { cafeId: string; chainId?: string };
 
-export default function BusinessTab({ cafeId: cafeIdProp }: Props) {
+export default function BusinessTab({ cafeId: cafeIdProp, chainId }: Props) {
   const [form, setForm] = useState<BusinessForm>(emptyForm);
   const [savedForm, setSavedForm] = useState<BusinessForm>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -674,6 +674,13 @@ export default function BusinessTab({ cafeId: cafeIdProp }: Props) {
         menuUrl: form.menuUrl.trim(),
         updatedAt: serverTimestamp(),
       });
+
+      if (chainId) {
+        await updateDoc(doc(db, "chains", chainId), {
+          logoUrl: nextLogoUrl,
+          category: form.category.trim(),
+        });
+      }
 
       const updated: BusinessForm = {
         ...form,

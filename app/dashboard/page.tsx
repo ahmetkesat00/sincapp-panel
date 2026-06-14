@@ -343,7 +343,7 @@ export default function DashboardPage() {
       case "business":
         // ✅ BusinessTab zaten circular crop tool'ü içeriyor!
         // business-tab-WITH-CROP.tsx kullan
-        return <BusinessTab cafeId={cafeId} />;
+        return <BusinessTab cafeId={cafeId} chainId={chain?.id} />;
 
       case "loyalty":
         return (
