@@ -92,6 +92,15 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   const [pendingTokens, setPendingTokens] = useState<PendingToken[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
+  // Zincir marka state
+  const [chainLogoUrl, setChainLogoUrl] = useState("");
+  const [chainCategory, setChainCategory] = useState("");
+  const [brandLogoFile, setBrandLogoFile] = useState<File | null>(null);
+  const [brandLogoPreview, setBrandLogoPreview] = useState("");
+  const [brandCategory, setBrandCategory] = useState("");
+  const [isSavingBrand, setIsSavingBrand] = useState(false);
+  const [brandMessage, setBrandMessage] = useState("");
+
   const functions = getFunctions(undefined, "europe-west1");
 
   // ==========================================
@@ -100,7 +109,11 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   useEffect(() => {
     if (chainId) {
       return onSnapshot(doc(db, "chains", chainId), (snap) => {
-        const lc = snap.data()?.loyaltyCard ?? null;
+        const data = snap.data();
+        const lc = data?.loyaltyCard ?? null;
+        setChainLogoUrl(data?.logoUrl ?? "");
+        setChainCategory(data?.category ?? "");
+        setBrandCategory((prev) => prev || (data?.category ?? ""));
         if (lc) {
           setCards([{
             id: "chain-card",
@@ -348,6 +361,36 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   }
 
   // ==========================================
+  // Zincir marka kaydet
+  // ==========================================
+  async function handleSaveChainBrand() {
+    if (!chainId) return;
+    setIsSavingBrand(true);
+    setBrandMessage("");
+    try {
+      let logoUrl = chainLogoUrl;
+      if (brandLogoFile) {
+        const storageRef = ref(storage, `chains/${chainId}/logo_${Date.now()}.jpg`);
+        await uploadBytes(storageRef, brandLogoFile);
+        logoUrl = await getDownloadURL(storageRef);
+      }
+      await updateDoc(doc(db, "chains", chainId), {
+        logoUrl,
+        category: brandCategory,
+      });
+      setBrandLogoFile(null);
+      setBrandLogoPreview("");
+      setBrandMessage("✅ Marka bilgileri güncellendi.");
+    } catch (err) {
+      console.error(err);
+      setBrandMessage("❌ Güncelleme sırasında hata oluştu.");
+    } finally {
+      setIsSavingBrand(false);
+      setTimeout(() => setBrandMessage(""), 4000);
+    }
+  }
+
+  // ==========================================
   // QR oluştur
   // ==========================================
   const handleCreateQR = async () => {
@@ -459,6 +502,76 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               Mağaza bilgileri yüklenemedi. Sayfayı yenileyiniz.
             </div>
+          )}
+
+          {/* ========== ZİNCİR MARKA AYARLARI ========== */}
+          {chainId && (
+            <section className={`${shellCardClass()} overflow-hidden`}>
+              <SectionTitle
+                eyebrow="Zincir Markası"
+                title="Marka Ayarları"
+                description="Tüm şubelerde ortak görünen logo ve kategori."
+              />
+              <div className="space-y-5 p-6">
+                {/* Logo */}
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-slate-800">Zincir Logosu</p>
+                  <div className="flex items-center gap-4">
+                    {(brandLogoPreview || chainLogoUrl) && (
+                      <img
+                        src={brandLogoPreview || chainLogoUrl}
+                        alt="logo"
+                        className="h-16 w-16 rounded-2xl border border-slate-200 object-cover"
+                      />
+                    )}
+                    <label className="cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100">
+                      {brandLogoPreview ? "Değiştir" : chainLogoUrl ? "Logoyu değiştir" : "Logo seç"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setBrandLogoFile(file);
+                          setBrandLogoPreview(URL.createObjectURL(file));
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Kategori */}
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-slate-800">Kategori</p>
+                  <select
+                    value={brandCategory}
+                    onChange={(e) => setBrandCategory(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  >
+                    <option value="">— Kategori seç —</option>
+                    {["Kafe", "Restoran", "Pastane & Fırın", "Tatlı", "Dondurma", "Pizza", "Burger", "Diğer"].map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {brandMessage && (
+                  <div className={`rounded-2xl border px-4 py-3 text-sm font-medium ${brandMessage.includes("✅") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+                    {brandMessage}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveChainBrand}
+                  disabled={isSavingBrand}
+                  className="w-full rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingBrand ? "Kaydediliyor…" : "Kaydet"}
+                </button>
+              </div>
+            </section>
           )}
 
           {/* ========== KART LİSTESİ ========== */}
