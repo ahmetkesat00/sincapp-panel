@@ -271,6 +271,20 @@ export default function BusinessTab({ cafeId: cafeIdProp, chainId }: Props) {
           menuUrl: String(d?.menuUrl ?? ""),
         };
 
+        // Zincir modunda logo ve kategori chain dökümanından gelir
+        if (chainId) {
+          try {
+            const chainSnap = await getDoc(doc(db, "chains", chainId));
+            if (chainSnap.exists()) {
+              const cd = chainSnap.data();
+              if (cd.logoUrl) loaded.logoUrl = String(cd.logoUrl);
+              if (cd.category) loaded.category = String(cd.category);
+            }
+          } catch (err) {
+            console.error("Chain fetch error:", err);
+          }
+        }
+
         setForm(loaded);
         setSavedForm(loaded);
         setLogoPreview(loaded.logoUrl);
