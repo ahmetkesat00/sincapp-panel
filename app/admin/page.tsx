@@ -285,6 +285,9 @@ export default function AdminPage() {
   const [chainMessage, setChainMessage] = useState("");
   const [chainError, setChainError] = useState("");
   const [deletingChainId, setDeletingChainId] = useState("");
+  const [editingChainNameId, setEditingChainNameId] = useState<string | null>(null);
+  const [editingChainNameValue, setEditingChainNameValue] = useState("");
+  const [savingChainName, setSavingChainName] = useState(false);
 
   // ── Şube Talepleri state ──
   const [branchRequests, setBranchRequests] = useState<BranchRequest[]>([]);
@@ -1428,6 +1431,23 @@ export default function AdminPage() {
       setChainError("Zincir silinirken hata oluştu.");
     } finally {
       setDeletingChainId("");
+    }
+  }
+
+  // ── Zincir adı güncelle ──
+  async function handleUpdateChainName(chainId: string) {
+    const newName = editingChainNameValue.trim();
+    if (!newName) return;
+    setSavingChainName(true);
+    try {
+      await updateDoc(doc(db, "chains", chainId), { name: newName });
+      setEditingChainNameId(null);
+      setEditingChainNameValue("");
+    } catch (err) {
+      console.error(err);
+      alert("Zincir adı güncellenirken hata oluştu.");
+    } finally {
+      setSavingChainName(false);
     }
   }
 
@@ -3342,8 +3362,47 @@ export default function AdminPage() {
                     return (
                       <div key={chain.id} className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
                         <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-900">{chain.name}</p>
+                          <div className="min-w-0 flex-1">
+                            {editingChainNameId === chain.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  autoFocus
+                                  value={editingChainNameValue}
+                                  onChange={(e) => setEditingChainNameValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleUpdateChainName(chain.id);
+                                    if (e.key === "Escape") { setEditingChainNameId(null); setEditingChainNameValue(""); }
+                                  }}
+                                  className="min-w-0 flex-1 rounded-xl border border-orange-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateChainName(chain.id)}
+                                  disabled={savingChainName}
+                                  className="shrink-0 rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60"
+                                >
+                                  {savingChainName ? "…" : "Kaydet"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingChainNameId(null); setEditingChainNameValue(""); }}
+                                  className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-50"
+                                >
+                                  İptal
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-slate-900">{chain.name}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingChainNameId(chain.id); setEditingChainNameValue(chain.name); }}
+                                  className="rounded-lg border border-orange-200 bg-white px-2 py-0.5 text-xs text-orange-600 transition hover:bg-orange-100"
+                                >
+                                  Düzenle
+                                </button>
+                              </div>
+                            )}
                             <p className="mt-0.5 text-xs text-slate-500">
                               Owner UID: {chain.ownerUid.slice(0, 16)}…
                             </p>

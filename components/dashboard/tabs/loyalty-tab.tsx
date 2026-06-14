@@ -533,11 +533,11 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
                     {/* Bilgiler */}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900">
-                        {card.itemTypeId}
+                        {ITEM_TYPES.find(t => t.value === card.itemTypeId)?.label ?? card.itemTypeId}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Her {card.rewardBuy}{" "}
-                        {card.itemTypeId.toLowerCase()}de 1 hediye
+                        {(ITEM_TYPES.find(t => t.value === card.itemTypeId)?.label ?? card.itemTypeId).toLowerCase()}de 1 hediye
                       </p>
                       {card.programDescription && (
                         <p className="text-xs text-slate-400 mt-1 line-clamp-1">
@@ -912,7 +912,7 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
                               {businessForm.cafeName || "Mağaza adı"}
                             </p>
                             <p className="text-xs text-slate-400">
-                              {card.itemTypeId}
+                              {ITEM_TYPES.find(t => t.value === card.itemTypeId)?.label ?? card.itemTypeId}
                             </p>
                             <div className="mt-2">
                               <div className="h-1.5 w-full rounded-full bg-slate-100">
