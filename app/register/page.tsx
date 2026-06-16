@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
@@ -31,6 +31,8 @@ export default function RegisterPage() {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = credential.user;
+
+      await sendEmailVerification(user);
 
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
