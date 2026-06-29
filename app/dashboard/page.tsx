@@ -185,6 +185,11 @@ export default function DashboardPage() {
           return;
         }
 
+        if (!user.emailVerified) {
+          router.replace("/verify-email");
+          return;
+        }
+
         // Bekleyen şube talepleri kaç tane? (rules yoksa sessizce geç)
         try {
           const branchReqSnap = await getDocs(
