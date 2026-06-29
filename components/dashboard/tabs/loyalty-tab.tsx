@@ -91,6 +91,7 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   const [qrError, setQrError] = useState<string | null>(null);
   const [pendingTokens, setPendingTokens] = useState<PendingToken[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [stampCounts, setStampCounts] = useState<Record<string, number>>({});
 
   // Zincir marka state
   const [chainLogoUrl, setChainLogoUrl] = useState("");
@@ -433,13 +434,14 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   const handleProcess = async (
     txId: string,
     processType: "stamp" | "redeem",
-    userId: string
+    userId: string,
+    count = 1
   ) => {
     if (!cafeId) return;
     try {
       setIsProcessing(txId);
       const approveQrToken = httpsCallable(functions, "approveQrToken");
-      await approveQrToken({ txId, type: processType });
+      await approveQrToken({ txId, type: processType, count });
     } catch (error) {
       console.error(error);
       alert(
@@ -922,10 +924,25 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-1 py-1">
+                        <button
+                          type="button"
+                          onClick={() => setStampCounts(prev => ({ ...prev, [item.id]: Math.max(1, (prev[item.id] ?? 1) - 1) }))}
+                          className="px-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                        >−</button>
+                        <span className="w-5 text-center text-sm font-bold text-slate-900">
+                          {stampCounts[item.id] ?? 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setStampCounts(prev => ({ ...prev, [item.id]: Math.min(20, (prev[item.id] ?? 1) + 1) }))}
+                          className="px-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                        >+</button>
+                      </div>
                       <button
                         onClick={() =>
                           item.scannedUserId &&
-                          handleProcess(item.id, "stamp", item.scannedUserId)
+                          handleProcess(item.id, "stamp", item.scannedUserId, stampCounts[item.id] ?? 1)
                         }
                         disabled={
                           isProcessing === item.id || !item.scannedUserId
