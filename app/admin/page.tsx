@@ -33,6 +33,7 @@ import { auth, db, storage } from "@/lib/firebase";
 import ImageCropper from "@/components/dashboard/ui/image-cropper";
 import CircularCropTool from "@/components/dashboard/ui/circular-crop-tool";
 import getCroppedImg from "@/lib/cropImage";
+import PlatformStatsSection from "@/components/admin/platform-stats-section";
 
 // ─────────────────────────────────────────────
 // Types
@@ -1778,6 +1779,7 @@ export default function AdminPage() {
             { label: "Zincir Yönetimi", href: "#section-chains" },
             { label: "Kampanyalar", href: "#section-campaigns" },
             { label: "Kategoriler", href: "#section-categories" },
+            { label: "Müşteri İstatistikleri", href: "#section-platform-stats" },
           ].map((item) => (
             <a
               key={item.href}
@@ -3469,6 +3471,11 @@ export default function AdminPage() {
             </div>
           </section>
         </div>
+
+        {/* ── Müşteri İstatistikleri ── */}
+        <PlatformStatsSection
+          cafes={cafes.map((c) => ({ id: c.id, name: c.name }))}
+        />
 
       </div>
     </main>
