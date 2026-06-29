@@ -33,6 +33,7 @@ type TxRow = {
   userId: string;
   type: "stamp" | "redeem" | string;
   status: string;
+  stampCount: number;
   createdAt: Timestamp | null;
   scannedAt: Timestamp | null;
 };
@@ -203,6 +204,7 @@ export default function ReportsTab({ cafeId }: { cafeId: string }) {
               userId: (data.scannedUserId || data.userId || "") as string,
               type: (data.processedType || data.type || "") as string,
               status: (data.status || "") as string,
+              stampCount: Number(data.stampCount ?? 1),
               createdAt: (data.createdAt as Timestamp) ?? null,
               scannedAt: (data.scannedAt as Timestamp) ?? null,
             };
@@ -383,7 +385,7 @@ export default function ReportsTab({ cafeId }: { cafeId: string }) {
                         {tx.userId ? `${tx.userId.slice(0, 12)}...` : "Kullanıcı bilinmiyor"}
                       </p>
                       <p className={`text-sm font-semibold ${typeStyle(tx.type)}`}>
-                        {typeLabel(tx.type)}
+                        {tx.type === "stamp" ? `Damga${tx.stampCount > 1 ? ` (x${tx.stampCount})` : ""}` : typeLabel(tx.type)}
                       </p>
                     </div>
                   </div>
