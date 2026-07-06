@@ -29,7 +29,8 @@ import {
   getDownloadURL,
   deleteObject,
 } from "firebase/storage";
-import { auth, db, storage } from "@/lib/firebase";
+import { auth, db, storage, functions } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import ImageCropper from "@/components/dashboard/ui/image-cropper";
 import CircularCropTool from "@/components/dashboard/ui/circular-crop-tool";
 import getCroppedImg from "@/lib/cropImage";
@@ -179,6 +180,8 @@ export default function AdminPage() {
   const [searchEmail, setSearchEmail] = useState("");
   const [searchingUser, setSearchingUser] = useState(false);
   const [foundUser, setFoundUser] = useState<FoundUser | null>(null);
+  const [verifyingEmail, setVerifyingEmail] = useState(false);
+  const [verifyEmailMsg, setVerifyEmailMsg] = useState("");
 
   const [creatingCafe, setCreatingCafe] = useState(false);
   const [newCafeName, setNewCafeName] = useState("");
@@ -1588,6 +1591,22 @@ export default function AdminPage() {
     }
   }
 
+  // ── Email Manuel Doğrula ──
+  async function handleVerifyEmail(uid: string) {
+    setVerifyingEmail(true);
+    setVerifyEmailMsg("");
+    try {
+      const verifyUserEmail = httpsCallable(functions, "verifyUserEmail");
+      await verifyUserEmail({ uid });
+      setVerifyEmailMsg("Email başarıyla doğrulandı.");
+    } catch (err) {
+      setVerifyEmailMsg("Doğrulama başarısız oldu.");
+      console.error(err);
+    } finally {
+      setVerifyingEmail(false);
+    }
+  }
+
   // ── Başvuru Onayla ──
   async function handleApproveUser(pendingUser: PendingUser) {
     setApprovingUid(pendingUser.uid);
@@ -2104,6 +2123,19 @@ export default function AdminPage() {
                     <p><span className="font-semibold text-slate-800">Rol:</span> {foundUser.role}</p>
                     <p><span className="font-semibold text-slate-800">Bağlı cafeId:</span> {foundUser.cafeId ?? "-"}</p>
                     <p><span className="font-semibold text-slate-800">Durum:</span> {foundUser.isActive ? "Aktif" : "Pasif"}</p>
+                  </div>
+                  <div className="mt-4 border-t border-slate-200 pt-4">
+                    {verifyEmailMsg && (
+                      <p className="mb-2 text-xs font-medium text-emerald-700">{verifyEmailMsg}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyEmail(foundUser.uid)}
+                      disabled={verifyingEmail}
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
+                    >
+                      {verifyingEmail ? "Doğrulanıyor..." : "📧 Email'i Doğrulandı Yap"}
+                    </button>
                   </div>
                 </div>
               )}
