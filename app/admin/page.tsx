@@ -35,6 +35,7 @@ import ImageCropper from "@/components/dashboard/ui/image-cropper";
 import CircularCropTool from "@/components/dashboard/ui/circular-crop-tool";
 import getCroppedImg from "@/lib/cropImage";
 import PlatformStatsSection from "@/components/admin/platform-stats-section";
+import QrMenuSection from "@/components/admin/qr-menu-section";
 
 // ─────────────────────────────────────────────
 // Types
@@ -1799,6 +1800,7 @@ export default function AdminPage() {
             { label: "Kampanyalar", href: "#section-campaigns" },
             { label: "Kategoriler", href: "#section-categories" },
             { label: "Müşteri İstatistikleri", href: "#section-platform-stats" },
+            { label: "QR Menü", href: "#section-qr-menu" },
           ].map((item) => (
             <a
               key={item.href}
@@ -3506,6 +3508,11 @@ export default function AdminPage() {
 
         {/* ── Müşteri İstatistikleri ── */}
         <PlatformStatsSection
+          cafes={cafes.map((c) => ({ id: c.id, name: c.name }))}
+        />
+
+        {/* ── QR Menü ── */}
+        <QrMenuSection
           cafes={cafes.map((c) => ({ id: c.id, name: c.name }))}
         />
 

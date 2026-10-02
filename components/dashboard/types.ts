@@ -9,6 +9,7 @@ export type NavId =
   | "campaigns"
   | "events"        // 🔥 YENİ: EventsTab için
   | "customers"
+  | "qrMenu"
   | "reports"
   | "settings";
 

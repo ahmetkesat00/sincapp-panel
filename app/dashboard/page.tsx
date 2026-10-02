@@ -23,6 +23,7 @@ import {
   CalendarDays,
   Home,
   LineChart,
+  QrCode,
   Settings,
   Tag,
   Users,
@@ -40,6 +41,7 @@ import BusinessTab from "@/components/dashboard/tabs/business-tab";
 import LoyaltyTab from "@/components/dashboard/tabs/loyalty-tab";
 import CampaignsTab from "@/components/dashboard/tabs/campaigns-tab";
 import CustomersTab from "@/components/dashboard/tabs/customers-tab";
+import QrMenuTab from "@/components/dashboard/tabs/qr-menu-tab";
 import ReportsTab from "@/components/dashboard/tabs/reports-tab";
 import SettingsTab from "@/components/dashboard/tabs/settings-tab";
 import EventsTab from "@/components/dashboard/tabs/events-tab";
@@ -65,6 +67,7 @@ const navItems: NavItem[] = [
   { id: "campaigns", label: "Kampanya Yönetimi", icon: Tag },
   { id: "events", label: "Etkinlik Yönetimi", icon: CalendarDays },
   { id: "customers", label: "Kullanıcı Puan Takibi", icon: Users },
+  { id: "qrMenu", label: "QR Menü", icon: QrCode },
   { id: "reports", label: "Raporlar", icon: LineChart },
   { id: "settings", label: "Ayarlar", icon: Settings },
 ];
@@ -367,6 +370,9 @@ export default function DashboardPage() {
 
       case "customers":
         return <CustomersTab cafeId={cafeId} />;
+
+      case "qrMenu":
+        return <QrMenuTab cafeId={cafeId} cafeName={businessForm.cafeName} />;
 
       case "reports":
         return <ReportsTab cafeId={cafeId} />;
