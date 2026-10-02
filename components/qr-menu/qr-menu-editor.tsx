@@ -17,6 +17,7 @@ import {
 } from "@/lib/qr-menu/firestore";
 import type { MenuCategory, MenuItem, QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
+import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
 import { Field, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
@@ -34,6 +35,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
   const [error, setError] = useState("");
   const [settings, setSettings] = useState<QrMenuSettings | null>(null);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | undefined>();
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [editing, setEditing] = useState<{ item: MenuItem; isNew: boolean } | null>(null);
@@ -46,6 +48,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
         if (!active) return;
         setSettings(data.settings);
         setSavedSlug(data.hasSettings ? data.settings.slug : null);
+        setLogoUrl(data.logoUrl);
         setCategories(data.categories);
         setItems(data.items);
       })
@@ -207,6 +210,10 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
             setSavedSlug(s.slug);
           }}
         />
+      )}
+
+      {settings && (
+        <QrCodesCard cafeId={cafeId} cafeName={cafeName} logoUrl={logoUrl} settings={settings} isSaved={savedSlug !== null} />
       )}
 
       {items.length > 0 && (

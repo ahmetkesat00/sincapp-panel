@@ -41,6 +41,8 @@ export const isValidSlug = (s: string) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) && 
 export type LoadedMenu = {
   settings: QrMenuSettings;
   hasSettings: boolean;
+  /** Masa kartlarında kullanılır. */
+  logoUrl?: string;
   categories: MenuCategory[];
   items: MenuItem[];
 };
@@ -55,6 +57,7 @@ export async function loadQrMenu(cafeId: string, cafeName: string): Promise<Load
   return {
     settings: stored ?? { ...DEFAULT_SETTINGS, slug: slugify(cafeName) },
     hasSettings: Boolean(stored),
+    logoUrl: (cafeSnap.data()?.logoUrl as string | undefined) || undefined,
     categories: catSnap.docs
       .map((d) => ({ ...(d.data() as Omit<MenuCategory, "id">), id: d.id }))
       .sort((a, b) => a.sortOrder - b.sortOrder),
