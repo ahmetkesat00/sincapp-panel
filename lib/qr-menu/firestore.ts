@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
+import type { QrStyle } from "./qr-style";
 import { DEFAULT_SETTINGS, type MenuCategory, type MenuItem, type QrMenuSettings } from "./types";
 
 // Firestore `undefined` alanları kabul etmez; formdan gelen boş opsiyonel alanları temizler.
@@ -43,6 +44,7 @@ export type LoadedMenu = {
   hasSettings: boolean;
   /** Masa kartlarında kullanılır. */
   logoUrl?: string;
+  heroImage?: string;
   categories: MenuCategory[];
   items: MenuItem[];
 };
@@ -58,6 +60,7 @@ export async function loadQrMenu(cafeId: string, cafeName: string): Promise<Load
     settings: stored ?? { ...DEFAULT_SETTINGS, slug: slugify(cafeName) },
     hasSettings: Boolean(stored),
     logoUrl: (cafeSnap.data()?.logoUrl as string | undefined) || undefined,
+    heroImage: (cafeSnap.data()?.heroImage as string | undefined) || undefined,
     categories: catSnap.docs
       .map((d) => ({ ...(d.data() as Omit<MenuCategory, "id">), id: d.id }))
       .sort((a, b) => a.sortOrder - b.sortOrder),
@@ -84,6 +87,10 @@ export async function saveSettings(cafeId: string, settings: QrMenuSettings): Pr
     await setDoc(slugRef, { cafeId, createdAt: serverTimestamp() });
   }
   await updateDoc(doc(db, "cafes", cafeId), { qrMenu: clean(settings), updatedAt: serverTimestamp() });
+}
+
+export async function saveQrStyle(cafeId: string, style: QrStyle): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.qrStyle": style });
 }
 
 export async function touchPricesUpdatedAt(cafeId: string): Promise<string> {

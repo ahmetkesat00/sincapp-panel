@@ -12,6 +12,7 @@ import {
   saveCategory,
   saveItem,
   saveOrder,
+  saveQrStyle,
   saveSettings,
   touchPricesUpdatedAt,
 } from "@/lib/qr-menu/firestore";
@@ -36,6 +37,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
   const [settings, setSettings] = useState<QrMenuSettings | null>(null);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | undefined>();
+  const [heroImage, setHeroImage] = useState<string | undefined>();
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [editing, setEditing] = useState<{ item: MenuItem; isNew: boolean } | null>(null);
@@ -49,6 +51,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
         setSettings(data.settings);
         setSavedSlug(data.hasSettings ? data.settings.slug : null);
         setLogoUrl(data.logoUrl);
+        setHeroImage(data.heroImage);
         setCategories(data.categories);
         setItems(data.items);
       })
@@ -205,15 +208,28 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
           initial={settings}
           savedSlug={savedSlug}
           onSave={async (s) => {
-            await saveSettings(cafeId, s);
-            setSettings(s);
-            setSavedSlug(s.slug);
+            // Ayar formu QR kişiselleştirmesini bilmez; kaydederken mevcut qrStyle korunur.
+            const next = { ...s, qrStyle: settings.qrStyle };
+            await saveSettings(cafeId, next);
+            setSettings(next);
+            setSavedSlug(next.slug);
           }}
         />
       )}
 
       {settings && (
-        <QrCodesCard cafeId={cafeId} cafeName={cafeName} logoUrl={logoUrl} settings={settings} isSaved={savedSlug !== null} />
+        <QrCodesCard
+          cafeId={cafeId}
+          cafeName={cafeName}
+          logoUrl={logoUrl}
+          heroImage={heroImage}
+          settings={settings}
+          isSaved={savedSlug !== null}
+          onSaveStyle={async (qrStyle) => {
+            await saveQrStyle(cafeId, qrStyle);
+            setSettings((s) => (s ? { ...s, qrStyle } : s));
+          }}
+        />
       )}
 
       {items.length > 0 && (

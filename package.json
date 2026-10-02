@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "firebase": "^12.12.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.8.0",
     "next": "^14.2.35",
+    "qr-code-styling": "^1.9.2",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

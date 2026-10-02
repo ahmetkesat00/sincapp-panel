@@ -1,3 +1,5 @@
+import type { QrStyle } from "./qr-style";
+
 // QR Menü veri modeli. menu.loopygo.app (loopygo-menu projesi, lib/types.ts) ile birebir aynı
 // tutulmalı — bir tarafta alan eklenirse diğerine de eklenmeli.
 //
@@ -43,6 +45,8 @@ export type QrMenuSettings = {
   locales: Locale[];
   timezone: string;
   pricesUpdatedAt: string;
+  /** Panelde QR kişiselleştirme ayarları (menü sitesi kullanmaz). */
+  qrStyle?: QrStyle;
 };
 
 export type MenuCategory = {
