@@ -35,6 +35,7 @@ import ImageCropper from "@/components/dashboard/ui/image-cropper";
 import CircularCropTool from "@/components/dashboard/ui/circular-crop-tool";
 import getCroppedImg from "@/lib/cropImage";
 import PlatformStatsSection from "@/components/admin/platform-stats-section";
+import AllUsersSection from "@/components/admin/all-users-section";
 import QrMenuSection from "@/components/admin/qr-menu-section";
 
 // ─────────────────────────────────────────────
@@ -71,6 +72,7 @@ type CafeItem = {
   rejectionNote: string;
   ownerEmail: string;
   ownerName: string;
+  dailyStampLimit: number | null;
 };
 
 type CampaignItem = {
@@ -189,6 +191,7 @@ export default function AdminPage() {
 
   const [cafes, setCafes] = useState<CafeItem[]>([]);
   const [togglingCafeId, setTogglingCafeId] = useState("");
+  const [togglingStampLimitId, setTogglingStampLimitId] = useState("");
   const [togglingVisibilityId, setTogglingVisibilityId] = useState("");
   const [deletingCafeId, setDeletingCafeId] = useState("");
 
@@ -371,6 +374,10 @@ export default function AdminPage() {
                 rejectionNote: safeString(d.rejectionNote),
                 ownerEmail: "",
                 ownerName: "",
+                dailyStampLimit:
+                  typeof d.dailyStampLimit === "number" && d.dailyStampLimit > 0
+                    ? d.dailyStampLimit
+                    : null,
               };
             });
             setCafes(next);
@@ -788,6 +795,39 @@ export default function AdminPage() {
       setErrorText("Aktiflik durumu güncellenirken hata oluştu.");
     } finally {
       setTogglingCafeId("");
+    }
+  }
+
+  // ── Günlük damga limiti toggle (sadece admin) ──
+  async function handleToggleDailyStampLimit(cafe: CafeItem) {
+    const enabling = !cafe.dailyStampLimit;
+    if (
+      !confirm(
+        enabling
+          ? `"${cafe.name}" için günlük damga limiti açılsın mı?\n\nMüşteriler bu işletmeden günde en fazla 1 damga alabilecek.`
+          : `"${cafe.name}" için günlük damga limiti kapatılsın mı?`
+      )
+    ) {
+      return;
+    }
+    setTogglingStampLimitId(cafe.id);
+    setErrorText("");
+    setMessage("");
+    try {
+      await updateDoc(doc(db, "cafes", cafe.id), {
+        dailyStampLimit: enabling ? 1 : deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+      setMessage(
+        enabling
+          ? `"${cafe.name}" için günlük damga limiti açıldı (günde 1 damga).`
+          : `"${cafe.name}" için günlük damga limiti kapatıldı.`
+      );
+    } catch (error) {
+      console.error(error);
+      setErrorText("Günlük damga limiti güncellenirken hata oluştu.");
+    } finally {
+      setTogglingStampLimitId("");
     }
   }
 
@@ -1800,6 +1840,7 @@ export default function AdminPage() {
             { label: "Kampanyalar", href: "#section-campaigns" },
             { label: "Kategoriler", href: "#section-categories" },
             { label: "Müşteri İstatistikleri", href: "#section-platform-stats" },
+            { label: "Tüm Kullanıcılar", href: "#section-all-users" },
             { label: "QR Menü", href: "#section-qr-menu" },
           ].map((item) => (
             <a
@@ -2197,6 +2238,11 @@ export default function AdminPage() {
                             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
                               {cafe.approvalStatus}
                             </span>
+                            {cafe.dailyStampLimit && (
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                Günlük limit: {cafe.dailyStampLimit} damga
+                              </span>
+                            )}
                           </div>
                           <div className="mt-3 space-y-1 text-sm text-slate-600">
                             <p><span className="font-semibold text-slate-800">Cafe ID:</span> {cafe.id}</p>
@@ -2212,6 +2258,22 @@ export default function AdminPage() {
                             className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
                           >
                             {togglingVisibilityId === cafe.id ? "..." : cafe.isVisible ? "Yayından Kaldır" : "Yayına Al"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDailyStampLimit(cafe)}
+                            disabled={togglingStampLimitId === cafe.id}
+                            className={`rounded-2xl border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
+                              cafe.dailyStampLimit
+                                ? "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            {togglingStampLimitId === cafe.id
+                              ? "..."
+                              : cafe.dailyStampLimit
+                                ? "Günlük Limiti Kapat"
+                                : "Günde 1 Damga Limiti"}
                           </button>
                           <button
                             type="button"
@@ -3508,6 +3570,11 @@ export default function AdminPage() {
 
         {/* ── Müşteri İstatistikleri ── */}
         <PlatformStatsSection
+          cafes={cafes.map((c) => ({ id: c.id, name: c.name }))}
+        />
+
+        {/* ── Tüm Kullanıcılar ── */}
+        <AllUsersSection
           cafes={cafes.map((c) => ({ id: c.id, name: c.name }))}
         />
 

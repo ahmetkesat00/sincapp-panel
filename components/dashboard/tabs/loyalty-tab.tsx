@@ -92,6 +92,9 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
   const [pendingTokens, setPendingTokens] = useState<PendingToken[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [stampCounts, setStampCounts] = useState<Record<string, number>>({});
+  // Admin tarafından açılan günlük damga limiti (null = sınırsız)
+  const [dailyStampLimit, setDailyStampLimit] = useState<number | null>(null);
+  const maxStampCount = dailyStampLimit ?? 20;
 
   // Zincir marka state
   const [chainLogoUrl, setChainLogoUrl] = useState("");
@@ -136,6 +139,18 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
       setCards([...raw].sort((a, b) => a.position - b.position));
     });
   }, [cafeId, chainId]);
+
+  // ==========================================
+  // Günlük damga limiti — cafes/{cafeId}.dailyStampLimit
+  // (asıl kontrol approveQrToken'da; burası sadece seçiciyi sınırlar)
+  // ==========================================
+  useEffect(() => {
+    if (!cafeId) return;
+    return onSnapshot(doc(db, "cafes", cafeId), (snap) => {
+      const v = snap.data()?.dailyStampLimit;
+      setDailyStampLimit(typeof v === "number" && v > 0 ? v : null);
+    });
+  }, [cafeId]);
 
   // ==========================================
   // Pending tokens
@@ -901,6 +916,11 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
                 description={`${pendingTokens.length} müşteri tarafından QR tarandı, onay bekleniyor.`}
               />
               <div className="space-y-3 p-6">
+                {dailyStampLimit && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                    Bu işletmede müşteri başına günde en fazla {dailyStampLimit} damga verilebilir.
+                  </div>
+                )}
                 {pendingTokens.map((item) => (
                   <div
                     key={item.id}
@@ -931,18 +951,19 @@ export default function LoyaltyTab({ cafeId, businessForm, chainId }: Props) {
                           className="px-2 text-sm font-bold text-slate-600 hover:text-slate-900"
                         >−</button>
                         <span className="w-5 text-center text-sm font-bold text-slate-900">
-                          {stampCounts[item.id] ?? 1}
+                          {Math.min(stampCounts[item.id] ?? 1, maxStampCount)}
                         </span>
                         <button
                           type="button"
-                          onClick={() => setStampCounts(prev => ({ ...prev, [item.id]: Math.min(20, (prev[item.id] ?? 1) + 1) }))}
-                          className="px-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                          onClick={() => setStampCounts(prev => ({ ...prev, [item.id]: Math.min(maxStampCount, (prev[item.id] ?? 1) + 1) }))}
+                          disabled={(stampCounts[item.id] ?? 1) >= maxStampCount}
+                          className="px-2 text-sm font-bold text-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-30"
                         >+</button>
                       </div>
                       <button
                         onClick={() =>
                           item.scannedUserId &&
-                          handleProcess(item.id, "stamp", item.scannedUserId, stampCounts[item.id] ?? 1)
+                          handleProcess(item.id, "stamp", item.scannedUserId, Math.min(stampCounts[item.id] ?? 1, maxStampCount))
                         }
                         disabled={
                           isProcessing === item.id || !item.scannedUserId
