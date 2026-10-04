@@ -159,26 +159,11 @@ export default function QrCodesCard({ cafeId, cafeName, logoUrl, heroImage, sett
   ].join(" · ");
 
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">QR kodları</h3>
-          <p className="text-xs text-slate-500">
-            Masalara, kapıya veya kasaya koyacağınız QR kodlar. Menü linkinizi değiştirseniz bile basılı QR&apos;lar çalışmaya devam eder.
-          </p>
-        </div>
-        {isSaved && (
-          <button type="button" className={smallBtnCls} onClick={() => setCustomizing(true)}>
-            <Palette className="h-3.5 w-3.5" />
-            Kişiselleştir
-          </button>
-        )}
-      </div>
-
+    <div className="space-y-5">
       {!isSaved ? (
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          QR oluşturmak için önce yukarıdaki menü ayarlarını kaydedin.
+          QR oluşturmak için önce menü ayarlarını kaydedin.
         </p>
       ) : (
         <>
@@ -223,6 +208,10 @@ export default function QrCodesCard({ cafeId, cafeName, logoUrl, heroImage, sett
                   {isDefault ? "Standart siyah-beyaz QR · " : ""}
                   {summary}
                 </p>
+                <button type="button" className={smallBtnCls} onClick={() => setCustomizing(true)}>
+                  <Palette className="h-3.5 w-3.5" />
+                  Kişiselleştir (logo, renk, şablon)
+                </button>
               </div>
             </div>
 
@@ -230,8 +219,7 @@ export default function QrCodesCard({ cafeId, cafeName, logoUrl, heroImage, sett
             <div className="space-y-3">
               <p className="text-sm font-semibold text-slate-900">Masa QR kartları</p>
               <p className="text-xs text-slate-500">
-                Her masaya ayrı QR: okutulunca menüde masa numarası görünür. Kartlar A4&apos;e basılır; kesip masaya koyabilirsiniz.
-                Kartlarda yönetmeliğin istediği &quot;cihazı olmayanlara bilgi talep hâlinde sunulur&quot; notu hazır bulunur.
+                Her masaya ayrı QR; okutulunca menüde masa numarası görünür. A4&apos;e basılır, kesip masaya koyabilirsiniz.
               </p>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="block">

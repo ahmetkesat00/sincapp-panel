@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 import type { LocalizedText } from "@/lib/qr-menu/types";
 
 export const inputCls =
@@ -107,6 +109,52 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       </span>
       {label}
     </button>
+  );
+}
+
+/**
+ * Tıklayınca açılan bölüm. Kapalıyken başlık ve tek satırlık özet görünür.
+ * İçerik ilk açılıştan sonra kapansa da DOM'da kalır; yarım kalmış form kaybolmaz.
+ */
+export function Collapsible({
+  icon,
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  summary?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [mounted, setMounted] = useState(defaultOpen);
+  return (
+    <div className={`overflow-hidden rounded-2xl border transition ${open ? "border-slate-300 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(!open);
+          setMounted(true);
+        }}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+      >
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-slate-900">{title}</span>
+          {summary && <span className="block truncate text-xs text-slate-500">{summary}</span>}
+        </span>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {mounted && (
+        <div hidden={!open} className="border-t border-slate-100 p-5">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -24,9 +24,6 @@ export default function QrMenuSection({ cafes }: { cafes: CafeOption[] }) {
       <div className="border-b border-slate-200 px-6 py-5">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">QR Menü</p>
         <h2 className="mt-1 text-lg font-semibold text-slate-900">İşletme menülerini düzenle</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Kategoriler, ürünler, içindekiler, alerjenler ve kalori bilgileri. Değişiklikler menu.loopygo.app üzerinde yayınlanır.
-        </p>
       </div>
 
       <div className="space-y-5 p-6">

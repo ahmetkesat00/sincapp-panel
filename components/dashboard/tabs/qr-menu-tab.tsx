@@ -10,11 +10,7 @@ export default function QrMenuTab({ cafeId, cafeName }: Props) {
   return (
     <div className="space-y-6">
       <section className={`${shellCardClass()} overflow-hidden`}>
-        <SectionTitle
-          eyebrow="QR Menü"
-          title="Dijital menünüzü yönetin"
-          description="Kategoriler, ürünler, fiyatlar, içindekiler, alerjenler ve kalori bilgileri. Masalardaki QR kod bu menüyü açar."
-        />
+        <SectionTitle eyebrow="QR Menü" title="Dijital menünüzü yönetin" />
         <div className="p-6">
           {cafeId ? (
             <QrMenuEditor key={cafeId} cafeId={cafeId} cafeName={cafeName} />

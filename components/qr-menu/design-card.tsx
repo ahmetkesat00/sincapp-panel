@@ -63,21 +63,10 @@ export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Pr
     });
 
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">Menü tasarımı</h3>
-          <p className="text-xs text-slate-500">
-            Bir tasarıma tıklayın, örnek bir menüde kaydırarak inceleyin. Taslak olarak kaydedebilir, hazır olduğunuzda yayınlayabilirsiniz.
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">Bir tasarıma tıklayıp örnek menüde kaydırarak inceleyin.</p>
         <ModeSwitch value={thumbMode} onChange={setThumbMode} />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
-          <Check className="h-3.5 w-3.5" /> Yayında: {designOf(live).name}
-        </span>
       </div>
 
       {draft && (

@@ -3,7 +3,7 @@
 type Props = {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
 };
 
 export default function SectionTitle({
@@ -17,9 +17,11 @@ export default function SectionTitle({
         {eyebrow}
       </p>
       <h2 className="mt-1 text-lg font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-        {description}
-      </p>
+      {description && (
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+          {description}
+        </p>
+      )}
     </div>
   );
 }

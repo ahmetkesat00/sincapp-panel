@@ -1,6 +1,21 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Eye, EyeOff, Pencil, Plus, Trash2, TriangleAlert, UtensilsCrossed, Wine } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  LayoutTemplate,
+  Pencil,
+  Plus,
+  QrCode,
+  Settings2,
+  Trash2,
+  TriangleAlert,
+  UtensilsCrossed,
+  Wine,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   deleteCategory,
@@ -16,12 +31,12 @@ import {
   saveSettings,
   touchPricesUpdatedAt,
 } from "@/lib/qr-menu/firestore";
-import type { MenuCategory, MenuItem, QrMenuSettings } from "@/lib/qr-menu/types";
+import { MENU_BASE_URL, MENU_DESIGNS, type MenuCategory, type MenuItem, type MenuLayout, type QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
 import DesignCard from "./design-card";
 import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
-import { Field, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
+import { Collapsible, Field, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = { cafeId: string; cafeName: string };
 
@@ -203,53 +218,65 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
     <div className="space-y-6">
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>}
 
-      {settings && (
-        <SettingsCard
-          cafeName={cafeName}
-          initial={settings}
-          savedSlug={savedSlug}
-          onSave={async (s) => {
-            // Form sadece kendi alanlarını yazar; tasarım, QR stili, fiyat tarihi gibi başka yerde
-            // değişmiş alanlar formun açıldığı andaki eski hâliyle ezilmesin.
-            const next: QrMenuSettings = {
-              ...settings,
-              enabled: s.enabled,
-              slug: s.slug,
-              tagline: s.tagline,
-              phone: s.phone,
-              wifi: s.wifi,
-              theme: s.theme,
-              locales: s.locales,
-            };
-            await saveSettings(cafeId, next);
-            setSettings(next);
-            setSavedSlug(next.slug);
-          }}
-        />
-      )}
+      {settings && <StatusBar settings={settings} savedSlug={savedSlug} categoryCount={categories.length} itemCount={items.length} />}
 
       {settings && (
-        <QrCodesCard
-          cafeId={cafeId}
-          cafeName={cafeName}
-          logoUrl={logoUrl}
-          heroImage={heroImage}
-          settings={settings}
-          isSaved={savedSlug !== null}
-          onSaveStyle={async (qrStyle) => {
-            await saveQrStyle(cafeId, qrStyle);
-            setSettings((s) => (s ? { ...s, qrStyle } : s));
-          }}
-        />
-      )}
+        <div className="space-y-3">
+          <Collapsible
+            icon={<Settings2 className="h-4 w-4" />}
+            title="Menü ayarları"
+            summary="Link, açıklama, telefon, Wi-Fi, tema renkleri ve diller"
+            // İlk kurulumda ayarlar kaydedilmeden QR ve önizleme çalışmaz; doğrudan açık gelsin.
+            defaultOpen={savedSlug === null}
+          >
+            <SettingsCard
+              cafeName={cafeName}
+              initial={settings}
+              savedSlug={savedSlug}
+              onSave={async (s) => {
+                // Form sadece kendi alanlarını yazar; tasarım, QR stili, fiyat tarihi gibi başka yerde
+                // değişmiş alanlar formun açıldığı andaki eski hâliyle ezilmesin.
+                const next: QrMenuSettings = {
+                  ...settings,
+                  enabled: s.enabled,
+                  slug: s.slug,
+                  tagline: s.tagline,
+                  phone: s.phone,
+                  wifi: s.wifi,
+                  theme: s.theme,
+                  locales: s.locales,
+                };
+                await saveSettings(cafeId, next);
+                setSettings(next);
+                setSavedSlug(next.slug);
+              }}
+            />
+          </Collapsible>
 
-      {settings && (
-        <DesignCard
-          cafeId={cafeId}
-          settings={settings}
-          savedSlug={savedSlug}
-          onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
-        />
+          <Collapsible icon={<QrCode className="h-4 w-4" />} title="QR kodları" summary="Genel QR, masa kartları, logo ve renkle kişiselleştirme">
+            <QrCodesCard
+              cafeId={cafeId}
+              cafeName={cafeName}
+              logoUrl={logoUrl}
+              heroImage={heroImage}
+              settings={settings}
+              isSaved={savedSlug !== null}
+              onSaveStyle={async (qrStyle) => {
+                await saveQrStyle(cafeId, qrStyle);
+                setSettings((s) => (s ? { ...s, qrStyle } : s));
+              }}
+            />
+          </Collapsible>
+
+          <Collapsible icon={<LayoutTemplate className="h-4 w-4" />} title="Menü tasarımı" summary={designSummary(settings)}>
+            <DesignCard
+              cafeId={cafeId}
+              settings={settings}
+              savedSlug={savedSlug}
+              onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
+            />
+          </Collapsible>
+        </div>
       )}
 
       {items.length > 0 && (
@@ -511,6 +538,53 @@ function CategoryForm({
           Vazgeç
         </button>
       </div>
+    </div>
+  );
+}
+
+const designName = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id)?.name ?? id;
+
+function designSummary(settings: QrMenuSettings) {
+  const live = settings.layout ?? "classic";
+  const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
+  return `Yayında: ${designName(live)}${draft ? ` · Taslak: ${designName(draft)}` : ""} · 10 tasarım, gece modu`;
+}
+
+/** Menünün durumu tek bakışta: yayında mı, linki ne, kaç ürün var. */
+function StatusBar({
+  settings,
+  savedSlug,
+  categoryCount,
+  itemCount,
+}: {
+  settings: QrMenuSettings;
+  savedSlug: string | null;
+  categoryCount: number;
+  itemCount: number;
+}) {
+  const live = savedSlug !== null && settings.enabled;
+  const link = savedSlug ? `${MENU_BASE_URL}/${savedSlug}` : null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-slate-50 px-4 py-3">
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+          live ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+        }`}
+      >
+        <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-500" : "bg-slate-400"}`} />
+        {live ? "Menü yayında" : savedSlug ? "Menü kapalı" : "Kurulum bekliyor"}
+      </span>
+      {link ? (
+        <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-emerald-700 hover:underline">
+          <span className="truncate">{link.replace(/^https?:\/\//, "")}</span>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+        </a>
+      ) : (
+        <span className="text-sm text-slate-500">Başlamak için menü ayarlarını kaydedin.</span>
+      )}
+      <span className="ml-auto text-xs text-slate-500">
+        {categoryCount} kategori · {itemCount} ürün
+      </span>
     </div>
   );
 }

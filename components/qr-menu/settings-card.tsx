@@ -42,13 +42,10 @@ export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: P
   };
 
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">Menü ayarları</h3>
-          <p className="text-xs text-slate-500">Link, Wi-Fi, tema ve diller.</p>
-        </div>
-        <Toggle checked={s.enabled} onChange={(v) => set("enabled", v)} label={s.enabled ? "Yayında" : "Yayında değil"} />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+        <Toggle checked={s.enabled} onChange={(v) => set("enabled", v)} label={s.enabled ? "Menü yayında" : "Menü yayında değil"} />
+        <span className="text-xs text-slate-500">Kapalıyken menü linki ve QR kodlar menüyü açmaz.</span>
       </div>
 
       <Field label="Menü linki" hint="Sadece küçük harf, rakam ve tire. Değiştirirseniz eski link yeni linke yönlendirilmeye devam eder.">
