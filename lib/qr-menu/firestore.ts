@@ -1,6 +1,7 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -12,7 +13,7 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import type { QrStyle } from "./qr-style";
-import { DEFAULT_SETTINGS, type MenuCategory, type MenuItem, type QrMenuSettings } from "./types";
+import { DEFAULT_SETTINGS, type MenuCategory, type MenuItem, type MenuLayout, type QrMenuSettings } from "./types";
 
 // Firestore `undefined` alanları kabul etmez; formdan gelen boş opsiyonel alanları temizler.
 function clean<T>(value: T): T {
@@ -87,6 +88,27 @@ export async function saveSettings(cafeId: string, settings: QrMenuSettings): Pr
     await setDoc(slugRef, { cafeId, createdAt: serverTimestamp() });
   }
   await updateDoc(doc(db, "cafes", cafeId), { qrMenu: clean(settings), updatedAt: serverTimestamp() });
+}
+
+// ─── Menü tasarımı: taslak → yayın ───
+// Sadece ilgili qrMenu alanları güncellenir; ayarların geri kalanına dokunulmaz.
+
+/** Seçilen tasarımı taslak olarak kaydeder (müşteriler hâlâ yayındakini görür). null: taslağı sil. */
+export async function saveDesignDraft(cafeId: string, layout: MenuLayout | null): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.layoutDraft": layout ?? deleteField() });
+}
+
+/** Tasarımı yayına alır ve taslağı temizler. */
+export async function publishDesign(cafeId: string, layout: MenuLayout): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.layout": layout, "qrMenu.layoutDraft": deleteField() });
+}
+
+/** Gece modu ayarları hemen yayına girer. defaultMode null: tasarımın varsayılanı. */
+export async function saveDarkModeSettings(cafeId: string, darkToggle: boolean, defaultMode: "light" | "dark" | null): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), {
+    "qrMenu.darkToggle": darkToggle,
+    "qrMenu.defaultMode": defaultMode ?? deleteField(),
+  });
 }
 
 export async function saveQrStyle(cafeId: string, style: QrStyle): Promise<void> {

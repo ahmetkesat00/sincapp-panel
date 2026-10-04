@@ -18,6 +18,7 @@ import {
 } from "@/lib/qr-menu/firestore";
 import type { MenuCategory, MenuItem, QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
+import DesignCard from "./design-card";
 import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
 import { Field, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
@@ -208,8 +209,18 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
           initial={settings}
           savedSlug={savedSlug}
           onSave={async (s) => {
-            // Ayar formu QR kişiselleştirmesini bilmez; kaydederken mevcut qrStyle korunur.
-            const next = { ...s, qrStyle: settings.qrStyle };
+            // Form sadece kendi alanlarını yazar; tasarım, QR stili, fiyat tarihi gibi başka yerde
+            // değişmiş alanlar formun açıldığı andaki eski hâliyle ezilmesin.
+            const next: QrMenuSettings = {
+              ...settings,
+              enabled: s.enabled,
+              slug: s.slug,
+              tagline: s.tagline,
+              phone: s.phone,
+              wifi: s.wifi,
+              theme: s.theme,
+              locales: s.locales,
+            };
             await saveSettings(cafeId, next);
             setSettings(next);
             setSavedSlug(next.slug);
@@ -229,6 +240,15 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
             await saveQrStyle(cafeId, qrStyle);
             setSettings((s) => (s ? { ...s, qrStyle } : s));
           }}
+        />
+      )}
+
+      {settings && (
+        <DesignCard
+          cafeId={cafeId}
+          settings={settings}
+          savedSlug={savedSlug}
+          onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
         />
       )}
 

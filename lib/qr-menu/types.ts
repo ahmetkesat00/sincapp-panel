@@ -35,7 +35,31 @@ export type ItemBadge = "new" | "chef" | "popular";
 
 export type TimeRange = { open: string; close: string };
 
+/** menu.loopygo.app tasarımları — loopygo-menu/lib/layouts.ts ile aynı tutulmalı. */
+export const MENU_DESIGNS = [
+  { id: "classic", name: "Klasik", description: "Kapak fotoğrafı, bilgi kartı ve küçük fotoğraflı liste. Her işletmeye uyar." },
+  { id: "editorial", name: "Editoryal", description: "Fotoğrafsız, zarif tipografi. Açıklamaları ve tat notları öne çıkar." },
+  { id: "showcase", name: "Vitrin", description: "Çok sevilenler şeridi ve ikili fotoğraf ızgarası. Fotoğrafları güçlü menüler için." },
+  { id: "quick", name: "Hızlı", description: "Kategori kutucukları, sıkı liste ve satırda boy fiyatları. Hızlı karar için." },
+  { id: "night", name: "Gece", description: "Koyu zemin ve parlak vurgular; büyük harfli başlıklar. Loş ortamlarda rahat okunur.", defaultDark: true },
+  { id: "gallery", name: "Galeri", description: "Tam genişlikte büyük fotoğraf kartları; ad ve fiyat fotoğrafın üstünde." },
+  { id: "paper", name: "Menü Kartı", description: "Basılı menü hissi: kâğıt zemin, çerçeve ve noktalı fiyat çizgileri." },
+  { id: "colorful", name: "Renkli", description: "Her kategori ayrı renkli bir blok. Neşeli ve samimi." },
+  { id: "rows", name: "Şeritler", description: "Her kategori yana kayan bir kart şeridi. Az kaydırmayla çok ürün." },
+  { id: "sidebar", name: "Yan Menü", description: "Kategoriler solda, ürünler sağda. Çok kategorili büyük menüler için." },
+] as const satisfies readonly { id: string; name: string; description: string; defaultDark?: boolean }[];
+
+export type MenuLayout = (typeof MENU_DESIGNS)[number]["id"];
+
 export type QrMenuSettings = {
+  /** Yayındaki tasarım (verilmezse Klasik). */
+  layout?: MenuLayout;
+  /** Seçilmiş ama henüz yayınlanmamış tasarım. */
+  layoutDraft?: MenuLayout;
+  /** Müşteri gece modunu açıp kapatabilsin mi (varsayılan: evet). */
+  darkToggle?: boolean;
+  /** Menünün açılış modu; verilmezse tasarımın varsayılanı. */
+  defaultMode?: "light" | "dark";
   enabled: boolean;
   slug: string;
   tagline?: LocalizedText;
