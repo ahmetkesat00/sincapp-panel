@@ -248,7 +248,6 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
           cafeId={cafeId}
           settings={settings}
           savedSlug={savedSlug}
-          hasItems={items.some((i) => i.isVisible)}
           onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
         />
       )}

@@ -9,10 +9,8 @@ import { Toggle, primaryBtnCls, smallBtnCls } from "./ui";
 type Props = {
   cafeId: string;
   settings: QrMenuSettings;
-  /** Önizleme menü linkiyle açılır; ayarlar en az bir kez kaydedilmiş olmalı. */
+  /** Yayınlamak için menü ayarları en az bir kez kaydedilmiş olmalı. */
   savedSlug: string | null;
-  /** Ürün yoksa önizleme örnek menüyle açılır (boş menüde tasarım anlaşılmıyor). */
-  hasItems: boolean;
   onChange: (patch: Partial<QrMenuSettings>) => void;
 };
 
@@ -21,7 +19,7 @@ type Mode = "light" | "dark";
 const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? MENU_DESIGNS[0];
 const thumbUrl = (id: MenuLayout, mode: Mode) => `${MENU_BASE_URL}/designs/${id}-${mode}.jpg`;
 
-export default function DesignCard({ cafeId, settings, savedSlug, hasItems, onChange }: Props) {
+export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Props) {
   const live: MenuLayout = settings.layout ?? "classic";
   const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
   const [thumbMode, setThumbMode] = useState<Mode>("light");
@@ -70,7 +68,7 @@ export default function DesignCard({ cafeId, settings, savedSlug, hasItems, onCh
         <div>
           <h3 className="text-sm font-bold text-slate-900">Menü tasarımı</h3>
           <p className="text-xs text-slate-500">
-            Bir tasarıma tıklayın, menünüzü o tasarımla önizleyin. Taslak olarak kaydedebilir, hazır olduğunuzda yayınlayabilirsiniz.
+            Bir tasarıma tıklayın, örnek bir menüde kaydırarak inceleyin. Taslak olarak kaydedebilir, hazır olduğunuzda yayınlayabilirsiniz.
           </p>
         </div>
         <ModeSwitch value={thumbMode} onChange={setThumbMode} />
@@ -155,8 +153,7 @@ export default function DesignCard({ cafeId, settings, savedSlug, hasItems, onCh
           initial={previewing}
           live={live}
           draft={draft}
-          slug={savedSlug}
-          hasItems={hasItems}
+          canPublish={savedSlug !== null}
           initialMode={settings.defaultMode ?? ("defaultDark" in designOf(previewing) ? "dark" : "light")}
           busy={busy}
           onSaveDraft={saveDraft}
@@ -195,8 +192,7 @@ function DesignPreview({
   initial,
   live,
   draft,
-  slug,
-  hasItems,
+  canPublish,
   initialMode,
   busy,
   onSaveDraft,
@@ -206,8 +202,7 @@ function DesignPreview({
   initial: MenuLayout;
   live: MenuLayout;
   draft: MenuLayout | null;
-  slug: string | null;
-  hasItems: boolean;
+  canPublish: boolean;
   initialMode: Mode;
   busy: boolean;
   onSaveDraft: (id: MenuLayout) => void;
@@ -217,17 +212,14 @@ function DesignPreview({
   const [id, setId] = useState<MenuLayout>(initial);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [confirming, setConfirming] = useState(false);
-  // Kendi menüsü ancak ürün varsa ve link kaydedilmişse gösterilebilir.
-  const canShowOwn = hasItems && slug !== null;
-  const [source, setSource] = useState<"own" | "demo">(canShowOwn ? "own" : "demo");
   const index = MENU_DESIGNS.findIndex((d) => d.id === id);
   const design = MENU_DESIGNS[index];
   const go = (dir: -1 | 1) => {
     setId(MENU_DESIGNS[(index + dir + MENU_DESIGNS.length) % MENU_DESIGNS.length].id);
     setConfirming(false);
   };
-  const params = `tasarim=${id}&mod=${mode === "dark" ? "gece" : "gunduz"}`;
-  const src = source === "own" && slug ? `${MENU_BASE_URL}/${slug}?${params}&onizleme=1` : `${MENU_BASE_URL}/ornek?${params}`;
+  // Önizleme her zaman uydurma örnek kafeyle: tasarım fikri versin, kafenin gerçek bilgisi görünmesin.
+  const src = `${MENU_BASE_URL}/ornek?tasarim=${id}&mod=${mode === "dark" ? "gece" : "gunduz"}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4">
@@ -236,7 +228,7 @@ function DesignPreview({
           <X className="h-5 w-5" />
         </button>
 
-        {/* Telefon çerçevesi: kafenin kendi menüsü seçilen tasarımla */}
+        {/* Telefon çerçevesi: örnek menü seçilen tasarımla, içinde kaydırılabilir */}
         <div className="mx-auto shrink-0">
           <div className="h-[640px] w-[320px] overflow-hidden rounded-[44px] border-[10px] border-slate-900 bg-slate-100 shadow-xl">
             <iframe key={src} src={src} title={`${design.name} önizleme`} className="h-full w-full border-0" />
@@ -263,38 +255,11 @@ function DesignPreview({
             {id === draft && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">Taslak</span>}
           </div>
 
-          <div className="mt-5 space-y-2">
-            <div className="inline-flex rounded-full bg-slate-100 p-1 text-xs font-semibold">
-              {(
-                [
-                  ["own", "Kendi menüm"],
-                  ["demo", "Örnek menü"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={source === value}
-                  disabled={value === "own" && !canShowOwn}
-                  onClick={() => setSource(value)}
-                  className={`rounded-full px-3 py-1 transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                    source === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {!canShowOwn && (
-              <p className="text-xs text-slate-400">
-                {slug
-                  ? "Menünüze henüz ürün eklemediniz; tasarım örnek bir kafe menüsüyle gösteriliyor."
-                  : "Kendi menünüzü görmek için önce menü ayarlarını kaydedin; şimdilik örnek menü gösteriliyor."}
-              </p>
-            )}
-          </div>
+          <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Önizlemedeki kafe, ürünler ve fotoğraflar örnektir. Yayınladığınızda menünüz kendi ürünleriniz ve logonuzla bu tasarımda görünür.
+          </p>
 
-          <div className="mt-4">
+          <div className="mt-5">
             <ModeSwitch value={mode} onChange={setMode} />
             <p className="mt-2 text-xs text-slate-400">Önizlemede gece modunu deneyin; müşterileriniz de menüde açıp kapatabilir.</p>
           </div>
@@ -322,7 +287,7 @@ function DesignPreview({
                   {id === draft ? <Check className="h-3.5 w-3.5" /> : null}
                   {id === draft ? "Taslak olarak kaydedildi" : "Taslak olarak kaydet"}
                 </button>
-                <button type="button" className={primaryBtnCls} disabled={busy || !slug} onClick={() => setConfirming(true)}>
+                <button type="button" className={primaryBtnCls} disabled={busy || !canPublish} onClick={() => setConfirming(true)}>
                   <Rocket className="h-4 w-4" /> Yayınla
                 </button>
               </div>
