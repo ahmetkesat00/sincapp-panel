@@ -38,7 +38,11 @@ export function slugify(input: string): string {
     .slice(0, 48);
 }
 
-export const isValidSlug = (s: string) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) && s.length >= 3 && s.length <= 48;
+// Menü sitesinde sabit sayfalara ayrılmış adresler (/ornek: tasarım önizlemesindeki örnek menü, /q: basılı QR, /api).
+const RESERVED_SLUGS = new Set(["ornek", "api", "designs"]);
+
+export const isValidSlug = (s: string) =>
+  /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) && s.length >= 3 && s.length <= 48 && !RESERVED_SLUGS.has(s);
 
 export type LoadedMenu = {
   settings: QrMenuSettings;

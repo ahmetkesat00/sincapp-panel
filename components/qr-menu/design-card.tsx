@@ -11,6 +11,8 @@ type Props = {
   settings: QrMenuSettings;
   /** Önizleme menü linkiyle açılır; ayarlar en az bir kez kaydedilmiş olmalı. */
   savedSlug: string | null;
+  /** Ürün yoksa önizleme örnek menüyle açılır (boş menüde tasarım anlaşılmıyor). */
+  hasItems: boolean;
   onChange: (patch: Partial<QrMenuSettings>) => void;
 };
 
@@ -19,7 +21,7 @@ type Mode = "light" | "dark";
 const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? MENU_DESIGNS[0];
 const thumbUrl = (id: MenuLayout, mode: Mode) => `${MENU_BASE_URL}/designs/${id}-${mode}.jpg`;
 
-export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Props) {
+export default function DesignCard({ cafeId, settings, savedSlug, hasItems, onChange }: Props) {
   const live: MenuLayout = settings.layout ?? "classic";
   const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
   const [thumbMode, setThumbMode] = useState<Mode>("light");
@@ -154,6 +156,7 @@ export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Pr
           live={live}
           draft={draft}
           slug={savedSlug}
+          hasItems={hasItems}
           initialMode={settings.defaultMode ?? ("defaultDark" in designOf(previewing) ? "dark" : "light")}
           busy={busy}
           onSaveDraft={saveDraft}
@@ -193,6 +196,7 @@ function DesignPreview({
   live,
   draft,
   slug,
+  hasItems,
   initialMode,
   busy,
   onSaveDraft,
@@ -203,6 +207,7 @@ function DesignPreview({
   live: MenuLayout;
   draft: MenuLayout | null;
   slug: string | null;
+  hasItems: boolean;
   initialMode: Mode;
   busy: boolean;
   onSaveDraft: (id: MenuLayout) => void;
@@ -212,13 +217,17 @@ function DesignPreview({
   const [id, setId] = useState<MenuLayout>(initial);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [confirming, setConfirming] = useState(false);
+  // Kendi menüsü ancak ürün varsa ve link kaydedilmişse gösterilebilir.
+  const canShowOwn = hasItems && slug !== null;
+  const [source, setSource] = useState<"own" | "demo">(canShowOwn ? "own" : "demo");
   const index = MENU_DESIGNS.findIndex((d) => d.id === id);
   const design = MENU_DESIGNS[index];
   const go = (dir: -1 | 1) => {
     setId(MENU_DESIGNS[(index + dir + MENU_DESIGNS.length) % MENU_DESIGNS.length].id);
     setConfirming(false);
   };
-  const src = slug ? `${MENU_BASE_URL}/${slug}?tasarim=${id}&mod=${mode === "dark" ? "gece" : "gunduz"}&onizleme=1` : null;
+  const params = `tasarim=${id}&mod=${mode === "dark" ? "gece" : "gunduz"}`;
+  const src = source === "own" && slug ? `${MENU_BASE_URL}/${slug}?${params}&onizleme=1` : `${MENU_BASE_URL}/ornek?${params}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4">
@@ -230,11 +239,7 @@ function DesignPreview({
         {/* Telefon çerçevesi: kafenin kendi menüsü seçilen tasarımla */}
         <div className="mx-auto shrink-0">
           <div className="h-[640px] w-[320px] overflow-hidden rounded-[44px] border-[10px] border-slate-900 bg-slate-100 shadow-xl">
-            {src ? (
-              <iframe key={src} src={src} title={`${design.name} önizleme`} className="h-full w-full border-0" />
-            ) : (
-              <div className="grid h-full place-items-center p-6 text-center text-sm text-slate-500">Önizleme için önce menü ayarlarını kaydedin.</div>
-            )}
+            <iframe key={src} src={src} title={`${design.name} önizleme`} className="h-full w-full border-0" />
           </div>
         </div>
 
@@ -258,7 +263,38 @@ function DesignPreview({
             {id === draft && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">Taslak</span>}
           </div>
 
-          <div className="mt-5">
+          <div className="mt-5 space-y-2">
+            <div className="inline-flex rounded-full bg-slate-100 p-1 text-xs font-semibold">
+              {(
+                [
+                  ["own", "Kendi menüm"],
+                  ["demo", "Örnek menü"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={source === value}
+                  disabled={value === "own" && !canShowOwn}
+                  onClick={() => setSource(value)}
+                  className={`rounded-full px-3 py-1 transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    source === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {!canShowOwn && (
+              <p className="text-xs text-slate-400">
+                {slug
+                  ? "Menünüze henüz ürün eklemediniz; tasarım örnek bir kafe menüsüyle gösteriliyor."
+                  : "Kendi menünüzü görmek için önce menü ayarlarını kaydedin; şimdilik örnek menü gösteriliyor."}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4">
             <ModeSwitch value={mode} onChange={setMode} />
             <p className="mt-2 text-xs text-slate-400">Önizlemede gece modunu deneyin; müşterileriniz de menüde açıp kapatabilir.</p>
           </div>
