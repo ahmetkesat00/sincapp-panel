@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Rocket, X } from "lucide-react";
+import { Check, ChevronRight, Rocket, Wand2, X } from "lucide-react";
 import { useState } from "react";
 import { MENU_BASE_URL, MENU_DESIGNS, type QrMenuSettings } from "@/lib/qr-menu/types";
 import { primaryBtnCls, smallBtnCls } from "./ui";
@@ -16,6 +16,7 @@ type Props = {
   onOpenQr: () => void;
   onPublish: () => Promise<void>;
   onDismiss: () => void;
+  onOpenWizard: () => void;
 };
 
 const smallPrimaryCls =
@@ -45,6 +46,7 @@ export default function SetupChecklist({
   onOpenQr,
   onPublish,
   onDismiss,
+  onOpenWizard,
 }: Props) {
   const [previewing, setPreviewing] = useState(false);
   const infoDone = savedSlug !== null;
@@ -111,6 +113,21 @@ export default function SetupChecklist({
           )}
         </div>
       </div>
+
+      {!live && (
+        <button
+          type="button"
+          onClick={onOpenWizard}
+          className="mt-4 flex w-full items-center gap-3 rounded-xl bg-emerald-600 px-4 py-3 text-left text-white transition hover:bg-emerald-700"
+        >
+          <Wand2 className="h-5 w-5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold">Menü Sihirbazı ile hızlı kur</span>
+            <span className="block text-xs text-emerald-50">Logonuza ve ürünlerinize göre tasarım ve renk önerir, adım adım yayına alır.</span>
+          </span>
+          <ChevronRight className="h-5 w-5 shrink-0" />
+        </button>
+      )}
 
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white">
         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(doneCount / steps.length) * 100}%` }} />

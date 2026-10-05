@@ -14,6 +14,7 @@ import {
   Trash2,
   TriangleAlert,
   UtensilsCrossed,
+  Wand2,
   Wine,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/qr-menu/firestore";
 import { MENU_BASE_URL, MENU_DESIGNS, type MenuCategory, type MenuItem, type MenuLayout, type QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
+import MenuWizard from "./menu-wizard";
 import DesignCard from "./design-card";
 import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
@@ -65,6 +67,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
   // yoksa form eski "kapalı" değerini tutar ve sonraki kayıtta menüyü geri kapatır.
   const [settingsFormKey, setSettingsFormKey] = useState(0);
   const [setupDismissed, setSetupDismissed] = useState(() => readDismissed(cafeId));
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const toggleSection = (section: Section, open: boolean) => setOpenSections((s) => ({ ...s, [section]: open }));
   const focusSection = (section: Section) => {
@@ -240,7 +243,13 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>}
 
       {settings && (menuLive && setupDismissed ? (
-        <StatusBar settings={settings} savedSlug={savedSlug} categoryCount={categories.length} itemCount={items.length} />
+        <StatusBar
+          settings={settings}
+          savedSlug={savedSlug}
+          categoryCount={categories.length}
+          itemCount={items.length}
+          onOpenWizard={() => setWizardOpen(true)}
+        />
       ) : (
         <SetupChecklist
           settings={settings}
@@ -260,8 +269,32 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
             writeDismissed(cafeId);
             setSetupDismissed(true);
           }}
+          onOpenWizard={() => setWizardOpen(true)}
         />
       ))}
+
+      {settings && wizardOpen && (
+        <MenuWizard
+          cafeName={cafeName}
+          logoUrl={logoUrl}
+          settings={settings}
+          savedSlug={savedSlug}
+          items={items}
+          categories={categories}
+          onFinish={async (next) => {
+            // saveSettings link adını da kaydeder (ilk kurulumda menuSlugs kaydı açılır).
+            await saveSettings(cafeId, next);
+            setSettings(next);
+            setSavedSlug(next.slug);
+            setSettingsFormKey((k) => k + 1);
+          }}
+          onGoToProducts={() => {
+            setWizardOpen(false);
+            focusProducts();
+          }}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
 
       {settings && (
         <div className="space-y-3">
@@ -635,11 +668,13 @@ function StatusBar({
   savedSlug,
   categoryCount,
   itemCount,
+  onOpenWizard,
 }: {
   settings: QrMenuSettings;
   savedSlug: string | null;
   categoryCount: number;
   itemCount: number;
+  onOpenWizard: () => void;
 }) {
   const live = savedSlug !== null && settings.enabled;
   const link = savedSlug ? `${MENU_BASE_URL}/${savedSlug}` : null;
@@ -664,6 +699,9 @@ function StatusBar({
       <span className="ml-auto text-xs text-slate-500">
         {categoryCount} kategori · {itemCount} ürün
       </span>
+      <button type="button" onClick={onOpenWizard} className={smallBtnCls}>
+        <Wand2 className="h-3.5 w-3.5" /> Menü Sihirbazı
+      </button>
     </div>
   );
 }
