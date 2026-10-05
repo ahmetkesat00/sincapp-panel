@@ -29,6 +29,7 @@ import {
   saveOrder,
   saveQrStyle,
   saveSettings,
+  setMenuEnabled,
   touchPricesUpdatedAt,
 } from "@/lib/qr-menu/firestore";
 import { MENU_BASE_URL, MENU_DESIGNS, type MenuCategory, type MenuItem, type MenuLayout, type QrMenuSettings } from "@/lib/qr-menu/types";
@@ -36,6 +37,7 @@ import ItemFormModal from "./item-form-modal";
 import DesignCard from "./design-card";
 import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
+import SetupChecklist from "./setup-checklist";
 import { Collapsible, Field, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = { cafeId: string; cafeName: string };
@@ -58,6 +60,22 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [editing, setEditing] = useState<{ item: MenuItem; isNew: boolean } | null>(null);
   const [categoryForm, setCategoryForm] = useState<MenuCategory | null>(null);
+  const [openSections, setOpenSections] = useState<Record<Section, boolean>>({ settings: false, qr: false, design: false });
+  // Dışarıdan (kurulum listesi) yayına alınınca ayar formu yeni değerle yeniden kurulsun;
+  // yoksa form eski "kapalı" değerini tutar ve sonraki kayıtta menüyü geri kapatır.
+  const [settingsFormKey, setSettingsFormKey] = useState(0);
+  const [setupDismissed, setSetupDismissed] = useState(() => readDismissed(cafeId));
+
+  const toggleSection = (section: Section, open: boolean) => setOpenSections((s) => ({ ...s, [section]: open }));
+  const focusSection = (section: Section) => {
+    toggleSection(section, true);
+    // Açılan bölüm DOM'a girdikten sonra kaydır.
+    setTimeout(() => document.getElementById(`qr-section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+  const focusProducts = () => {
+    if (categories.length === 0) setCategoryForm({ id: newCategoryId(cafeId), name: { tr: "" }, sortOrder: 0 });
+    setTimeout(() => document.getElementById("qr-products")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
 
   useEffect(() => {
     let active = true;
@@ -66,6 +84,8 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
         if (!active) return;
         setSettings(data.settings);
         setSavedSlug(data.hasSettings ? data.settings.slug : null);
+        // İlk kurulumda ayarlar kaydedilmeden QR ve önizleme çalışmaz; ayarlar açık gelsin.
+        if (!data.hasSettings) setOpenSections((s) => ({ ...s, settings: true }));
         setLogoUrl(data.logoUrl);
         setHeroImage(data.heroImage);
         setCategories(data.categories);
@@ -92,6 +112,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
   }, []);
 
   const showEn = settings?.locales.includes("en") ?? false;
+  const menuLive = savedSlug !== null && (settings?.enabled ?? false);
   const itemsByCategory = useMemo(() => {
     const map = new Map<string, MenuItem[]>();
     for (const c of categories) map.set(c.id, []);
@@ -218,18 +239,42 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
     <div className="space-y-6">
       {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>}
 
-      {settings && <StatusBar settings={settings} savedSlug={savedSlug} categoryCount={categories.length} itemCount={items.length} />}
+      {settings && (menuLive && setupDismissed ? (
+        <StatusBar settings={settings} savedSlug={savedSlug} categoryCount={categories.length} itemCount={items.length} />
+      ) : (
+        <SetupChecklist
+          settings={settings}
+          savedSlug={savedSlug}
+          categoryCount={categories.length}
+          visibleItemCount={items.filter((i) => i.isVisible).length}
+          onOpenSettings={() => focusSection("settings")}
+          onAddProducts={focusProducts}
+          onOpenDesigns={() => focusSection("design")}
+          onOpenQr={() => focusSection("qr")}
+          onPublish={async () => {
+            await setMenuEnabled(cafeId, true);
+            setSettings((s) => (s ? { ...s, enabled: true } : s));
+            setSettingsFormKey((k) => k + 1);
+          }}
+          onDismiss={() => {
+            writeDismissed(cafeId);
+            setSetupDismissed(true);
+          }}
+        />
+      ))}
 
       {settings && (
         <div className="space-y-3">
           <Collapsible
+            id="qr-section-settings"
             icon={<Settings2 className="h-4 w-4" />}
             title="Menü ayarları"
             summary="Link, açıklama, telefon, Wi-Fi, tema renkleri ve diller"
-            // İlk kurulumda ayarlar kaydedilmeden QR ve önizleme çalışmaz; doğrudan açık gelsin.
-            defaultOpen={savedSlug === null}
+            open={openSections.settings}
+            onOpenChange={(open) => toggleSection("settings", open)}
           >
             <SettingsCard
+              key={settingsFormKey}
               cafeName={cafeName}
               initial={settings}
               savedSlug={savedSlug}
@@ -253,7 +298,14 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
             />
           </Collapsible>
 
-          <Collapsible icon={<QrCode className="h-4 w-4" />} title="QR kodları" summary="Genel QR, masa kartları, logo ve renkle kişiselleştirme">
+          <Collapsible
+            id="qr-section-qr"
+            icon={<QrCode className="h-4 w-4" />}
+            title="QR kodları"
+            summary="Genel QR, masa kartları, logo ve renkle kişiselleştirme"
+            open={openSections.qr}
+            onOpenChange={(open) => toggleSection("qr", open)}
+          >
             <QrCodesCard
               cafeId={cafeId}
               cafeName={cafeName}
@@ -268,11 +320,19 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
             />
           </Collapsible>
 
-          <Collapsible icon={<LayoutTemplate className="h-4 w-4" />} title="Menü tasarımı" summary={designSummary(settings)}>
+          <Collapsible
+            id="qr-section-design"
+            icon={<LayoutTemplate className="h-4 w-4" />}
+            title="Menü tasarımı"
+            summary={designSummary(settings, menuLive)}
+            open={openSections.design}
+            onOpenChange={(open) => toggleSection("design", open)}
+          >
             <DesignCard
               cafeId={cafeId}
               settings={settings}
               savedSlug={savedSlug}
+              menuLive={menuLive}
               onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
             />
           </Collapsible>
@@ -302,7 +362,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
         </div>
       )}
 
-      <div className="space-y-4">
+      <div id="qr-products" className="scroll-mt-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Kategoriler ve ürünler</h3>
@@ -544,10 +604,29 @@ function CategoryForm({
 
 const designName = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id)?.name ?? id;
 
-function designSummary(settings: QrMenuSettings) {
+function designSummary(settings: QrMenuSettings, menuLive: boolean) {
   const live = settings.layout ?? "classic";
   const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
-  return `Yayında: ${designName(live)}${draft ? ` · Taslak: ${designName(draft)}` : ""} · 10 tasarım, gece modu`;
+  return `${menuLive ? "Yayında" : "Seçili"}: ${designName(live)}${draft ? ` · Taslak: ${designName(draft)}` : ""} · 10 tasarım, gece modu`;
+}
+
+type Section = "settings" | "qr" | "design";
+
+// Kurulum listesi kapatıldı mı (tarayıcı başına; kaybolursa liste tekrar görünür, zararı yok).
+const dismissKey = (cafeId: string) => `qr-menu-setup-dismissed:${cafeId}`;
+function readDismissed(cafeId: string) {
+  try {
+    return localStorage.getItem(dismissKey(cafeId)) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeDismissed(cafeId: string) {
+  try {
+    localStorage.setItem(dismissKey(cafeId), "1");
+  } catch {
+    // Depolama kapalıysa liste bir sonraki girişte yine görünür.
+  }
 }
 
 /** Menünün durumu tek bakışta: yayında mı, linki ne, kaç ürün var. */

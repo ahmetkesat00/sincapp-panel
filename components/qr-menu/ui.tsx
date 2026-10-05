@@ -117,29 +117,33 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
  * İçerik ilk açılıştan sonra kapansa da DOM'da kalır; yarım kalmış form kaybolmaz.
  */
 export function Collapsible({
+  id,
   icon,
   title,
   summary,
-  defaultOpen = false,
+  open,
+  onOpenChange,
   children,
 }: {
+  id?: string;
   icon: React.ReactNode;
   title: string;
   summary?: React.ReactNode;
-  defaultOpen?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const [mounted, setMounted] = useState(defaultOpen);
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
   return (
-    <div className={`overflow-hidden rounded-2xl border transition ${open ? "border-slate-300 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+    <div
+      id={id}
+      className={`scroll-mt-6 overflow-hidden rounded-2xl border transition ${open ? "border-slate-300 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}
+    >
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => {
-          setOpen(!open);
-          setMounted(true);
-        }}
+        onClick={() => onOpenChange(!open)}
         className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
       >
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">{icon}</span>

@@ -11,6 +11,11 @@ type Props = {
   settings: QrMenuSettings;
   /** Yayınlamak için menü ayarları en az bir kez kaydedilmiş olmalı. */
   savedSlug: string | null;
+  /**
+   * Menü müşteriye açık mı. Kapalıyken taslak/onay adımına gerek yok: seçilen tasarım
+   * doğrudan kaydedilir ve menü yayına alındığında kullanılır.
+   */
+  menuLive: boolean;
   onChange: (patch: Partial<QrMenuSettings>) => void;
 };
 
@@ -19,8 +24,9 @@ type Mode = "light" | "dark";
 const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? MENU_DESIGNS[0];
 const thumbUrl = (id: MenuLayout, mode: Mode) => `${MENU_BASE_URL}/designs/${id}-${mode}.jpg`;
 
-export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Props) {
+export default function DesignCard({ cafeId, settings, savedSlug, menuLive, onChange }: Props) {
   const live: MenuLayout = settings.layout ?? "classic";
+  const liveLabel = menuLive ? "Yayında" : "Seçili";
   const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
   const [thumbMode, setThumbMode] = useState<Mode>("light");
   const [previewing, setPreviewing] = useState<MenuLayout | null>(null);
@@ -106,7 +112,7 @@ export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Pr
                 <img src={thumbUrl(d.id, thumbMode)} alt={`${d.name} tasarımı`} loading="lazy" className="h-full w-full object-cover object-top transition group-hover:scale-[1.03]" />
                 {(isLive || isDraft) && (
                   <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-bold text-white ${isDraft ? "bg-amber-500" : "bg-emerald-600"}`}>
-                    {isDraft ? "Taslak" : "Yayında"}
+                    {isDraft ? "Taslak" : liveLabel}
                   </span>
                 )}
               </div>
@@ -141,6 +147,8 @@ export default function DesignCard({ cafeId, settings, savedSlug, onChange }: Pr
         <DesignPreview
           initial={previewing}
           live={live}
+          liveChosen={settings.layout !== undefined}
+          menuLive={menuLive}
           draft={draft}
           canPublish={savedSlug !== null}
           initialMode={settings.defaultMode ?? ("defaultDark" in designOf(previewing) ? "dark" : "light")}
@@ -180,6 +188,8 @@ function ModeSwitch({ value, onChange }: { value: Mode; onChange: (m: Mode) => v
 function DesignPreview({
   initial,
   live,
+  liveChosen,
+  menuLive,
   draft,
   canPublish,
   initialMode,
@@ -190,6 +200,9 @@ function DesignPreview({
 }: {
   initial: MenuLayout;
   live: MenuLayout;
+  /** false: hiç seçim yapılmadı, Klasik varsayılan olarak kullanılıyor. */
+  liveChosen: boolean;
+  menuLive: boolean;
   draft: MenuLayout | null;
   canPublish: boolean;
   initialMode: Mode;
@@ -240,7 +253,9 @@ function DesignPreview({
           <h3 className="mt-4 text-2xl font-bold text-slate-900">{design.name}</h3>
           <p className="mt-1 text-sm text-slate-500">{design.description}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {id === live && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Yayında</span>}
+            {id === live && liveChosen && (
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{menuLive ? "Yayında" : "Seçili"}</span>
+            )}
             {id === draft && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">Taslak</span>}
           </div>
 
@@ -254,8 +269,14 @@ function DesignPreview({
           </div>
 
           <div className="mt-auto space-y-3 pt-8">
-            {id === live ? (
-              <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">Bu tasarım şu an yayında.</p>
+            {id === live && liveChosen ? (
+              <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                {menuLive ? "Bu tasarım şu an yayında." : "Bu tasarım seçili; menünüzü yayına aldığınızda kullanılacak."}
+              </p>
+            ) : !menuLive ? (
+              <button type="button" className={primaryBtnCls} disabled={busy || !canPublish} onClick={() => onPublish(id)}>
+                <Check className="h-4 w-4" /> Bu tasarımı kullan
+              </button>
             ) : confirming ? (
               <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm text-slate-700">

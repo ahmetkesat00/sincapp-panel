@@ -119,6 +119,11 @@ export async function saveQrStyle(cafeId: string, style: QrStyle): Promise<void>
   await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.qrStyle": style });
 }
 
+/** Kurulum listesinin "Yayına al" adımı: sadece yayın durumunu değiştirir. */
+export async function setMenuEnabled(cafeId: string, enabled: boolean): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.enabled": enabled, updatedAt: serverTimestamp() });
+}
+
 export async function touchPricesUpdatedAt(cafeId: string): Promise<string> {
   const date = today();
   await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.pricesUpdatedAt": date });
