@@ -128,6 +128,11 @@ export type MenuItem = {
     docs?: string[];
   };
   badges?: ItemBadge[];
+  /**
+   * false: içindekiler/alerjenler yapay zekâyla içe aktarıldı, işletme henüz kontrol etmedi.
+   * Menü sitesi bu durumda alerjenleri kesin bilgi gibi göstermez. undefined/true: onaylı.
+   */
+  allergensConfirmed?: boolean;
   isAvailable: boolean;
   isVisible: boolean;
   loyaltyItemTypeId?: string;

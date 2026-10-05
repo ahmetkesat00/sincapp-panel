@@ -1,14 +1,20 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, ImageOff, LoaderCircle, Rocket, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ImageOff, LoaderCircle, Rocket, Sparkles, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { isValidSlug, slugify } from "@/lib/qr-menu/firestore";
 import { MENU_BASE_URL, MENU_DESIGNS, type MenuCategory, type MenuItem, type MenuLayout, type MenuTheme, type QrMenuSettings } from "@/lib/qr-menu/types";
 import { paletteFromLogo, suggestDesigns, themeQuery, type LogoPalette } from "@/lib/qr-menu/wizard";
+import MenuImport from "./menu-import";
 import { primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = {
+  cafeId: string;
   cafeName: string;
+  /** Menü müşteriye açık mı (içe aktarılan ürünler o zaman gizli eklenir). */
+  menuLive: boolean;
+  /** İçe aktarılan kategori/ürünleri editörün listesine ekler. */
+  onImported: (categories: MenuCategory[], items: MenuItem[], pricesUpdatedAt: string | null) => void;
   logoUrl?: string;
   settings: QrMenuSettings;
   savedSlug: string | null;
@@ -31,7 +37,7 @@ const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? ME
  * Menü Sihirbazı: sağdan açılan, adım adım kurulum. Logo ve içerikten tasarım ile renk önerir,
  * sonunda tek seferde kaydeder (ve istenirse yayına alır).
  */
-export default function MenuWizard({ cafeName, logoUrl, settings, savedSlug, items, categories, onFinish, onGoToProducts, onClose }: Props) {
+export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl, settings, savedSlug, items, categories, onFinish, onGoToProducts, onClose }: Props) {
   const visibleCount = items.filter((i) => i.isVisible).length;
   const photoCount = items.filter((i) => i.isVisible && i.imageUrl).length;
   const suggestions = useMemo(() => suggestDesigns(items, categories), [items, categories]);
@@ -175,23 +181,26 @@ export default function MenuWizard({ cafeName, logoUrl, settings, savedSlug, ite
 
               <section className="space-y-2">
                 <p className="text-sm font-semibold text-slate-900">Menünüz</p>
-                <div className="flex items-start gap-3 rounded-2xl border border-dashed border-slate-300 p-4 opacity-70">
-                  <Upload className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
-                  <div className="text-sm">
-                    <p className="font-medium text-slate-900">
-                      Menünüzü yükleyin <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">Yakında</span>
+                <MenuImport
+                  cafeId={cafeId}
+                  existingCategoryCount={categories.length}
+                  existingItemCount={items.length}
+                  menuLive={menuLive}
+                  onImported={onImported}
+                />
+                {items.length > 0 ? (
+                  <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+                    <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                    <p className="text-sm text-slate-700">
+                      {categories.length} kategori ve {items.length} ürününüz var
+                      {photoCount ? ` (${photoCount} tanesi fotoğraflı)` : ""}. Yüklemeden de devam edebilirsiniz.
                     </p>
-                    <p className="text-xs text-slate-500">PDF, fotoğraf veya web sitesi linki; ürünleriniz yapay zekâyla otomatik eklenecek.</p>
                   </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
-                  <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-                  <p className="text-sm text-slate-700">
-                    {visibleCount > 0
-                      ? `${categories.length} kategori ve ${visibleCount} ürününüzle devam ediyoruz${photoCount ? ` (${photoCount} tanesi fotoğraflı)` : ""}.`
-                      : "Ürünleri sihirbazdan sonra elle ekleyebilirsiniz; şimdilik tasarım ve renkleri seçelim."}
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Elinizde menü dosyası yoksa &quot;Devam&quot; ile geçin; ürünleri sihirbazdan sonra elle ekleyebilirsiniz.
                   </p>
-                </div>
+                )}
               </section>
 
               {savedSlug === null && (

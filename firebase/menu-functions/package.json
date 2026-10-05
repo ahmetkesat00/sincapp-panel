@@ -1,0 +1,17 @@
+{
+  "name": "loopygo-menu-functions",
+  "description": "QR menü içe aktarma (yapay zekâ) — panelden çağrılır",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "deploy": "firebase deploy --only functions:menu"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
+  }
+}

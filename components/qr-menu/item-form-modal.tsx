@@ -227,6 +227,15 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
             <p className="mb-3 text-xs text-slate-500">
               Alerjen, alkol ve domuz kaynaklı bileşenler menüde vurgulanır (Kılavuz 41.5). Seçeneğe bağlı bileşenleri (süt türü, şurup) aşağıda seçeneklerin içine ekleyin.
             </p>
+            {item.allergensConfirmed === false && (
+              <label className="mb-3 flex items-start gap-2.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm text-violet-900">
+                <input type="checkbox" className="mt-0.5" onChange={(e) => e.target.checked && set("allergensConfirmed", true)} />
+                <span>
+                  <span className="font-semibold">Bu içerikler yapay zekâ önerisi.</span> Bileşenleri ve alerjenleri kontrol ettim, doğru.
+                  <span className="block text-xs text-violet-700">Onaylanana kadar menüde alerjen bilgisi &quot;doğrulanmadı&quot; notuyla gösterilir.</span>
+                </span>
+              </label>
+            )}
             <IngredientsEditor value={item.ingredients} onChange={(v) => set("ingredients", v)} showEn={showEn} />
           </section>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Download, LoaderCircle, Palette, Printer, TriangleAlert } from "lucide-react";
+import { Check, Copy, Download, FileText, LoaderCircle, Palette, Printer, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { buildCardsHtml } from "@/lib/qr-menu/print-cards";
 import {
@@ -240,6 +240,24 @@ export default function QrCodesCard({ cafeId, cafeName, logoUrl, heroImage, sett
               </div>
               <p className="text-[11px] text-slate-400">Yazdırma penceresinde &quot;PDF olarak kaydet&quot; seçerek matbaaya da gönderebilirsiniz.</p>
             </div>
+          </div>
+
+          {/* Kılavuz md. 41.4: QR okutamayan misafire bilgi talep hâlinde sunulur — personel bu çıktıyı verir. */}
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+            <FileText className="h-5 w-5 shrink-0 text-slate-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">Basılı menü</p>
+              <p className="text-xs text-slate-500">
+                QR okutamayan misafirler için içindekiler, alerjen ve kalori bilgili tam menü. Bir kopyasını kasada bulundurun.
+              </p>
+            </div>
+            {settings.enabled ? (
+              <a href={`${MENU_BASE_URL}/${settings.slug}/print`} target="_blank" rel="noopener noreferrer" className={smallBtnCls}>
+                <Printer className="h-3.5 w-3.5" /> Basılı menüyü aç
+              </a>
+            ) : (
+              <span className="text-xs text-slate-400">Menü yayına alınınca açılır.</span>
+            )}
           </div>
         </>
       )}

@@ -275,7 +275,14 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
 
       {settings && wizardOpen && (
         <MenuWizard
+          cafeId={cafeId}
           cafeName={cafeName}
+          menuLive={menuLive}
+          onImported={(newCategories, newItems, pricesUpdatedAt) => {
+            setCategories((prev) => [...prev, ...newCategories]);
+            setItems((prev) => [...prev, ...newItems]);
+            if (pricesUpdatedAt) setSettings((s) => (s ? { ...s, pricesUpdatedAt } : s));
+          }}
           logoUrl={logoUrl}
           settings={settings}
           savedSlug={savedSlug}
@@ -513,7 +520,11 @@ function ItemRow({
   onPatch: (patch: Partial<Pick<MenuItem, "isAvailable" | "isVisible">>) => void;
   onDelete: () => void;
 }) {
-  const missing = [item.ingredients.length === 0 && "içindekiler", item.calories === undefined && "kalori"].filter(Boolean);
+  const missing = [
+    item.ingredients.length === 0 && "içindekiler",
+    item.calories === undefined && "kalori",
+    item.allergensConfirmed === false && "alerjen onayı",
+  ].filter(Boolean);
   const alcohol = item.ingredients.some((i) => i.alcohol);
 
   return (

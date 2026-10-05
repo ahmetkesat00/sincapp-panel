@@ -163,6 +163,19 @@ export async function deleteItem(cafeId: string, itemId: string): Promise<void> 
   await deleteDoc(doc(itemsCol(cafeId), itemId));
 }
 
+/** İçe aktarılan menüyü toplu yazar (Firestore toplu yazma sınırı için parça parça). */
+export async function saveImportedMenu(cafeId: string, categories: MenuCategory[], items: MenuItem[]): Promise<void> {
+  const writes = [
+    ...categories.map(({ id, ...data }) => ({ ref: doc(categoriesCol(cafeId), id), data })),
+    ...items.map(({ id, ...data }) => ({ ref: doc(itemsCol(cafeId), id), data })),
+  ];
+  for (let i = 0; i < writes.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const w of writes.slice(i, i + 400)) batch.set(w.ref, clean(w.data));
+    await batch.commit();
+  }
+}
+
 /** Sıralamayı toplu günceller (yukarı/aşağı taşıma sonrası). */
 export async function saveOrder(cafeId: string, kind: "menuCategories" | "menuItems", ids: string[]): Promise<void> {
   const batch = writeBatch(db);
