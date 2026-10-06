@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, ChevronRight, Copy, ExternalLink, Rocket, Wand2 } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Copy, ExternalLink, Rocket, Smartphone, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { MENU_BASE_URL, MENU_DESIGNS, type QrMenuSettings } from "@/lib/qr-menu/types";
 import PublishPreview from "./publish-preview";
@@ -14,6 +14,8 @@ type Props = {
   itemCount: number;
   visibleItemCount: number;
   onOpenWizard: () => void;
+  /** Canlı önizlemeli düzenleme (menü kurulmuş ve ürün varsa). */
+  onOpenStudio?: () => void;
   onAddProductsManually: () => void;
   onPublish: () => Promise<void>;
 };
@@ -27,7 +29,7 @@ const formatDate = (iso: string) => {
  * QR Menü sekmesinin başı: başlık, Menü Sihirbazı (işletmeyi buraya yönlendiriyoruz),
  * menü durumu/linki, kısa bilgiler ve menü yayında değilse tek bir "sıradaki adım".
  */
-export default function MenuHero({ title, settings, savedSlug, categoryCount, itemCount, visibleItemCount, onOpenWizard, onAddProductsManually, onPublish }: Props) {
+export default function MenuHero({ title, settings, savedSlug, categoryCount, itemCount, visibleItemCount, onOpenWizard, onOpenStudio, onAddProductsManually, onPublish }: Props) {
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const live = savedSlug !== null && settings.enabled;
@@ -89,6 +91,7 @@ export default function MenuHero({ title, settings, savedSlug, categoryCount, it
           </div>
         </div>
 
+        <div className="flex shrink-0 flex-col gap-2 md:min-w-[290px]">
         <button
           type="button"
           onClick={onOpenWizard}
@@ -103,6 +106,18 @@ export default function MenuHero({ title, settings, savedSlug, categoryCount, it
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 transition group-hover:translate-x-0.5" />
         </button>
+        {onOpenStudio && (
+          <button
+            type="button"
+            onClick={onOpenStudio}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800"
+          >
+            <Smartphone className="h-4 w-4 text-emerald-600" />
+            Menüyü düzenle
+            <span className="text-xs font-normal text-slate-400">· canlı önizleme</span>
+          </button>
+        )}
+        </div>
       </div>
 
       <dl className="grid grid-cols-2 border-t border-slate-100 md:grid-cols-4">

@@ -46,6 +46,7 @@ import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
 import StatsCard from "./stats-card";
 import MenuHero from "./menu-hero";
+import MenuStudio from "./menu-studio";
 import { Field, KeepAlive, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = { cafeId: string; cafeName: string; /** Başlık (admin sayfasında kafe adı). */ title?: string };
@@ -75,6 +76,9 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
   // yoksa form eski "kapalı" değerini tutar ve sonraki kayıtta menüyü geri kapatır.
   const [settingsFormKey, setSettingsFormKey] = useState(0);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
+  /** Ürün kaydedilince artar: "Menüyü düzenle" önizlemesi yenilensin. */
+  const [previewKey, setPreviewKey] = useState(0);
 
   const toggleCategory = (id: string) =>
     setExpanded((prev) => {
@@ -273,12 +277,35 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
           itemCount={items.length}
           visibleItemCount={visibleItemCount}
           onOpenWizard={() => setWizardOpen(true)}
+          onOpenStudio={savedSlug !== null && items.length > 0 ? () => setStudioOpen(true) : undefined}
           onAddProductsManually={focusProducts}
           onPublish={async () => {
             await setMenuEnabled(cafeId, true);
             setSettings((s) => (s ? { ...s, enabled: true } : s));
             setSettingsFormKey((k) => k + 1);
           }}
+        />
+      )}
+
+      {settings && studioOpen && savedSlug && (
+        <MenuStudio
+          settings={settings}
+          slug={savedSlug}
+          items={items}
+          logoUrl={logoUrl}
+          heroImage={heroImage}
+          menuLive={menuLive}
+          reloadKey={previewKey}
+          onEditItem={(id) => {
+            const item = items.find((i) => i.id === id);
+            if (item) setEditing({ item, isNew: false });
+          }}
+          onSave={async (next) => {
+            await saveSettings(cafeId, next);
+            setSettings(next);
+            setSettingsFormKey((k) => k + 1);
+          }}
+          onClose={() => setStudioOpen(false)}
         />
       )}
 
@@ -503,7 +530,10 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
           isNew={editing.isNew}
           categories={categories}
           showEn={showEn}
-          onSave={submitItem}
+          onSave={async (item) => {
+            await submitItem(item);
+            setPreviewKey((k) => k + 1);
+          }}
           onClose={() => setEditing(null)}
         />
       )}
