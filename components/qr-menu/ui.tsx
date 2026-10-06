@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { LocalizedText } from "@/lib/qr-menu/types";
 
@@ -113,53 +112,13 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 /**
- * Tıklayınca açılan bölüm. Kapalıyken başlık ve tek satırlık özet görünür.
- * İçerik ilk açılıştan sonra kapansa da DOM'da kalır; yarım kalmış form kaybolmaz.
+ * Sekme paneli: ilk kez açılınca kurulur, sonra gizlenip DOM'da kalır.
+ * Böylece sekme değiştirince yarım kalmış form kaybolmaz; hiç açılmayan sekme de veri çekmez.
  */
-export function Collapsible({
-  id,
-  icon,
-  title,
-  summary,
-  open,
-  onOpenChange,
-  children,
-}: {
-  id?: string;
-  icon: React.ReactNode;
-  title: string;
-  summary?: React.ReactNode;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
-}) {
-  const [mounted, setMounted] = useState(open);
-  if (open && !mounted) setMounted(true);
-  return (
-    <div
-      id={id}
-      className={`scroll-mt-6 overflow-hidden rounded-2xl border transition ${open ? "border-slate-300 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
-      >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">{icon}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-slate-900">{title}</span>
-          {summary && <span className="block truncate text-xs text-slate-500">{summary}</span>}
-        </span>
-        <ChevronDown className={`h-5 w-5 shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
-      </button>
-      {mounted && (
-        <div hidden={!open} className="border-t border-slate-100 p-5">
-          {children}
-        </div>
-      )}
-    </div>
-  );
+export function KeepAlive({ active, children }: { active: boolean; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(active);
+  if (active && !mounted) setMounted(true);
+  return mounted ? <div hidden={!active}>{children}</div> : null;
 }
 
 export const numberOrUndefined = (s: string) => (s.trim() === "" || Number.isNaN(Number(s)) ? undefined : Number(s));

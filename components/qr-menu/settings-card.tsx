@@ -126,7 +126,7 @@ export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: P
         </div>
         <Toggle checked={hasEn} onChange={(v) => set("locales", v ? ["tr", "en"] : ["tr"])} label="İngilizce menü" />
         <p className="text-xs text-slate-500">
-          Fiyat güncelleme tarihi: <span className="font-semibold text-slate-700">{s.pricesUpdatedAt}</span>
+          Fiyat güncelleme tarihi: <span className="font-semibold text-slate-700">{new Date(`${s.pricesUpdatedAt}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}</span>
         </p>
       </div>
 

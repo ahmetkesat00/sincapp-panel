@@ -53,7 +53,7 @@ export default function QrMenuSection({ cafes }: { cafes: CafeOption[] }) {
 
         {selected ? (
           // key: işletme değişince editör sıfırdan yüklenir.
-          <QrMenuEditor key={selected.id} cafeId={selected.id} cafeName={selected.name} />
+          <QrMenuEditor key={selected.id} cafeId={selected.id} cafeName={selected.name} title={selected.name || "QR menü"} />
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center">
             <QrCode className="mx-auto h-6 w-6 text-slate-300" />
