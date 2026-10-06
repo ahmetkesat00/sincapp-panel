@@ -1,7 +1,7 @@
 // Menü Sihirbazı yardımcıları: logodan tema renkleri ve içeriğe göre tasarım önerisi.
 
 import { loadLogoDataUrl } from "./qr-style";
-import type { MenuCategory, MenuItem, MenuLayout, MenuTheme } from "./types";
+import type { DesignGroup, MenuCategory, MenuItem, MenuLayout, MenuTheme } from "./types";
 
 // ─── Renk dönüşümleri ───
 
@@ -112,53 +112,80 @@ export async function paletteFromLogo(logoUrl: string): Promise<LogoPalette> {
 
 // ─── Tasarım önerisi ───
 
-export type DesignSuggestion = { id: MenuLayout; reason: string };
+export type DesignSuggestion = {
+  /** Fotoğraf oranına göre kategori (sihirbaz bu sekmeyi açar). */
+  group: DesignGroup;
+  groupReason: string;
+  /** Kategori içinde en uygun tasarım. */
+  best: MenuLayout;
+  bestReason: string;
+};
 
-/** Menünün içeriğine göre en uygun üç tasarım (ilki en uygun). */
-export function suggestDesigns(items: MenuItem[], categories: MenuCategory[]): DesignSuggestion[] {
+/**
+ * Menünün içeriğine göre kategori ve o kategorideki en uygun tasarım:
+ * fotoğraflı ürün oranı %60+ görsel ağırlıklı, %15+ karma, altı yazı ağırlıklı.
+ */
+export function suggestDesigns(items: MenuItem[], categories: MenuCategory[]): DesignSuggestion {
   const visible = items.filter((i) => i.isVisible);
   const n = visible.length;
   const photoRatio = n ? visible.filter((i) => i.imageUrl).length / n : 0;
   const sizeRatio = n ? visible.filter((i) => i.variants?.some((g) => g.selection === "single")).length / n : 0;
+  const manyCategories = categories.length >= 8;
+  const percent = `%${Math.round(photoRatio * 100)}`;
 
-  let list: DesignSuggestion[];
   if (n === 0) {
-    list = [
-      { id: "classic", reason: "Her menüye uyar; fotoğraflı da fotoğrafsız da iyi görünür." },
-      { id: "showcase", reason: "Ürün fotoğrafı ekleyecekseniz onları öne çıkarır." },
-      { id: "editorial", reason: "Fotoğraf eklemeyecekseniz şık ve sade durur." },
-    ];
-  } else if (photoRatio >= 0.6) {
-    list = [
-      { id: "gallery", reason: "Ürünlerinizin çoğunda fotoğraf var; büyük fotoğraf kartları iştah açar." },
-      { id: "showcase", reason: "Çok sevilenler şeridi ve fotoğraf ızgarası." },
-      { id: "classic", reason: "Fotoğraflar küçük, liste derli toplu." },
-    ];
-  } else if (photoRatio >= 0.2) {
-    list = [
-      { id: "classic", reason: "Fotoğraflı ve fotoğrafsız ürünler bir arada dengeli görünür." },
-      { id: "rows", reason: "Her kategori yana kayan şerit; az kaydırmayla çok ürün." },
-      { id: "quick", reason: "Sıkı liste, hızlı seçim." },
-    ];
-  } else {
-    list = [
-      { id: "editorial", reason: "Ürünlerinizde fotoğraf yok; zarif yazılar menüyü taşır." },
-      { id: "paper", reason: "Basılı menü hissi; fotoğrafsız menülere çok yakışır." },
-      { id: "quick", reason: "Sade ve hızlı okunan liste." },
-    ];
+    return { group: "mixed", groupReason: "Henüz ürün yok; karma tasarımlar fotoğraflı da fotoğrafsız da iyi görünür.", best: "classic", bestReason: "Her menüye uyar." };
   }
-
-  // Boy seçenekli ürünler çoksa satırda boy fiyatlarını gösteren Hızlı öne geçsin.
-  if (sizeRatio >= 0.3 && photoRatio < 0.6 && list[0].id !== "quick") {
-    list = [{ id: "quick", reason: "Boy seçenekli ürünleriniz çok; fiyatlar satırda yan yana görünür." }, ...list.filter((d) => d.id !== "quick")];
+  if (photoRatio >= 0.6) {
+    return manyCategories
+      ? { group: "photo", groupReason: `Ürünlerinizin ${percent}'inde fotoğraf var.`, best: "showcase", bestReason: "Çok kategoride fotoğrafları derli toplu ızgarada gösterir." }
+      : { group: "photo", groupReason: `Ürünlerinizin ${percent}'inde fotoğraf var.`, best: "gallery", bestReason: "Büyük fotoğraf kartları iştah açar." };
   }
-  // Çok kategorili büyük menülerde kategoriler yanda sabit dursun.
-  if (categories.length >= 8) {
-    list = [{ id: "sidebar", reason: `${categories.length} kategoriniz var; kategoriler solda hep görünür.` }, ...list.filter((d) => d.id !== "sidebar")];
+  if (photoRatio >= 0.15) {
+    const groupReason = `Ürünlerinizin bir kısmında fotoğraf var (${percent}).`;
+    if (manyCategories) return { group: "mixed", groupReason, best: "sidebar", bestReason: `${categories.length} kategoriniz var; kategoriler solda hep görünür.` };
+    if (sizeRatio >= 0.3) return { group: "mixed", groupReason, best: "quick", bestReason: "Boy seçenekli ürünleriniz çok; fiyatlar satırda yan yana görünür." };
+    return { group: "mixed", groupReason, best: "classic", bestReason: "Fotoğraflı ve fotoğrafsız ürünler bir arada dengeli görünür." };
   }
-  return list.slice(0, 3);
+  const groupReason = photoRatio > 0 ? "Ürünlerinizin çok azında fotoğraf var." : "Ürünlerinizde fotoğraf yok.";
+  if (sizeRatio >= 0.3) return { group: "text", groupReason, best: "paper", bestReason: "Basılı menü düzeninde fiyatlar noktalı çizgiyle hizalı, okunaklı." };
+  return { group: "text", groupReason, best: "editorial", bestReason: "Zarif yazılar ve açıklamalar menüyü taşır." };
 }
 
 /** Önizleme linkine eklenecek renk parametreleri (# olmadan). */
 export const themeQuery = (t: MenuTheme) =>
   `ana=${t.primary.slice(1)}&koyu=${t.primaryDark.slice(1)}&vurgu=${t.accent.slice(1)}`;
+
+// ─── Tasarım uyarıları ───
+
+/** Üst kısmında kafenin kapak fotoğrafını kullanan tasarımlar (menü sitesi: MenuHeader, CoverHeader, NightHeader). */
+const COVER_DESIGNS = new Set<MenuLayout>(["classic", "showcase", "gallery", "rows", "night"]);
+
+export type MenuPhotoStats = { itemCount: number; photoRatio: number; hasCover: boolean };
+
+export function photoStats(items: MenuItem[], heroImage?: string): MenuPhotoStats {
+  const visible = items.filter((i) => i.isVisible);
+  return {
+    itemCount: visible.length,
+    photoRatio: visible.length ? visible.filter((i) => i.imageUrl).length / visible.length : 0,
+    hasCover: Boolean(heroImage),
+  };
+}
+
+/** Seçilen tasarım menüye uymuyorsa bilgilendirme (seçimi engellemez). */
+export function designWarnings(id: MenuLayout, group: DesignGroup, stats: MenuPhotoStats): string[] {
+  const warnings: string[] = [];
+  const percent = `%${Math.round(stats.photoRatio * 100)}`;
+  if (stats.itemCount > 0 && group === "photo" && stats.photoRatio < 0.6) {
+    warnings.push(
+      `Ürünlerinizin ${stats.photoRatio === 0 ? "hiçbirinde" : `sadece ${percent}'inde`} fotoğraf var. Bu tasarım fotoğraflarla güzel görünür; fotoğrafsız ürünler sade liste olarak gösterilir.`,
+    );
+  }
+  if (stats.itemCount > 0 && group === "text" && stats.photoRatio >= 0.3) {
+    warnings.push(`Bu tasarım ürün fotoğraflarını göstermez; ürünlerinizin ${percent}'inde fotoğraf var.`);
+  }
+  if (COVER_DESIGNS.has(id) && !stats.hasCover) {
+    warnings.push("Bu tasarımın üstünde kapak fotoğrafı yer alır. Kapak fotoğrafınız olmadığı için marka renginde desen gösterilir; İşletme Yönetimi'nden ekleyebilirsiniz.");
+  }
+  return warnings;
+}

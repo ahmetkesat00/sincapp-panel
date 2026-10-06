@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, ImageOff, LoaderCircle, Rocket, Sparkles, Wand2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ImageOff, LoaderCircle, Rocket, Sparkles, TriangleAlert, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { isValidSlug, slugify } from "@/lib/qr-menu/firestore";
-import { MENU_BASE_URL, MENU_DESIGNS, type MenuCategory, type MenuItem, type MenuLayout, type MenuTheme, type QrMenuSettings } from "@/lib/qr-menu/types";
-import { paletteFromLogo, suggestDesigns, themeQuery, type LogoPalette } from "@/lib/qr-menu/wizard";
+import { DESIGN_GROUPS, MENU_BASE_URL, MENU_DESIGNS, type DesignGroup, type MenuCategory, type MenuItem, type MenuLayout, type MenuTheme, type QrMenuSettings } from "@/lib/qr-menu/types";
+import { designWarnings, paletteFromLogo, photoStats, suggestDesigns, themeQuery, type LogoPalette } from "@/lib/qr-menu/wizard";
 import MenuImport from "./menu-import";
 import { primaryBtnCls, smallBtnCls } from "./ui";
 
@@ -16,6 +16,8 @@ type Props = {
   /** İçe aktarılan kategori/ürünleri editörün listesine ekler. */
   onImported: (categories: MenuCategory[], items: MenuItem[], pricesUpdatedAt: string | null) => void;
   logoUrl?: string;
+  /** Kapak fotoğrafı: yoksa kapaklı tasarımlarda uyarı gösterilir. */
+  heroImage?: string;
   settings: QrMenuSettings;
   savedSlug: string | null;
   items: MenuItem[];
@@ -37,15 +39,27 @@ const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? ME
  * Menü Sihirbazı: sağdan açılan, adım adım kurulum. Logo ve içerikten tasarım ile renk önerir,
  * sonunda tek seferde kaydeder (ve istenirse yayına alır).
  */
-export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl, settings, savedSlug, items, categories, onFinish, onGoToProducts, onClose }: Props) {
+export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl, heroImage, settings, savedSlug, items, categories, onFinish, onGoToProducts, onClose }: Props) {
   const visibleCount = items.filter((i) => i.isVisible).length;
   const photoCount = items.filter((i) => i.isVisible && i.imageUrl).length;
-  const suggestions = useMemo(() => suggestDesigns(items, categories), [items, categories]);
+  const suggestion = useMemo(() => suggestDesigns(items, categories), [items, categories]);
+  const stats = useMemo(() => photoStats(items, heroImage), [items, heroImage]);
 
   const [step, setStep] = useState(0);
   const [slug, setSlug] = useState(savedSlug ?? (settings.slug || slugify(cafeName)));
-  const [layout, setLayout] = useState<MenuLayout>(settings.layout ?? suggestions[0].id);
-  const [showAllDesigns, setShowAllDesigns] = useState(false);
+  const [layout, setLayout] = useState<MenuLayout>(settings.layout ?? suggestion.best);
+  const [groupTab, setGroupTab] = useState<DesignGroup>(suggestion.group);
+  const [pickedByUser, setPickedByUser] = useState(Boolean(settings.layout));
+  // 1. adımda menü içe aktarılınca öneri değişir; işletme henüz kendisi seçmediyse yeni öneriye geç.
+  useEffect(() => {
+    if (pickedByUser) return;
+    setLayout(suggestion.best);
+    setGroupTab(suggestion.group);
+  }, [suggestion, pickedByUser]);
+  const pickLayout = (id: MenuLayout) => {
+    setLayout(id);
+    setPickedByUser(true);
+  };
   const [logo, setLogo] = useState<LogoPalette | null>(null);
   const [logoState, setLogoState] = useState<"idle" | "loading" | "error">(logoUrl ? "loading" : "idle");
   const [colorChoice, setColorChoice] = useState<ColorChoice>(logoUrl ? "logo" : "design");
@@ -218,21 +232,25 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
             <div className="grid gap-5 sm:grid-cols-[1fr_auto]">
               <div className="space-y-3">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900">Size önerdiğimiz tasarımlar</h3>
+                  <h3 className="text-xl font-bold text-slate-900">Tasarımınızı seçin</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    {visibleCount > 0 ? "Ürünlerinize ve fotoğraflarınıza göre seçtik." : "Ürün ekledikçe öneriler değişebilir."}
+                    {suggestion.groupReason} Size uygun kategoriyi açtık; diğerlerine de bakabilirsiniz.
                   </p>
                 </div>
-                {suggestions.map((s, i) => (
-                  <DesignOption key={s.id} id={s.id} reason={s.reason} best={i === 0} selected={layout === s.id} onSelect={() => setLayout(s.id)} />
-                ))}
-                <button type="button" onClick={() => setShowAllDesigns((v) => !v)} className="text-sm font-semibold text-emerald-700 hover:underline">
-                  {showAllDesigns ? "Diğer tasarımları gizle" : "Diğer tasarımları göster"}
-                </button>
-                {showAllDesigns &&
-                  MENU_DESIGNS.filter((d) => !suggestions.some((s) => s.id === d.id)).map((d) => (
-                    <DesignOption key={d.id} id={d.id} reason={d.description} selected={layout === d.id} onSelect={() => setLayout(d.id)} />
+                <GroupTabs value={groupTab} suggested={suggestion.group} onChange={setGroupTab} />
+                {MENU_DESIGNS.filter((d) => d.group === groupTab)
+                  .sort((a, b) => Number(b.id === suggestion.best) - Number(a.id === suggestion.best))
+                  .map((d) => (
+                    <DesignOption
+                      key={d.id}
+                      id={d.id}
+                      reason={d.id === suggestion.best ? suggestion.bestReason : d.description}
+                      best={d.id === suggestion.best}
+                      selected={layout === d.id}
+                      onSelect={() => pickLayout(d.id)}
+                    />
                   ))}
+                <DesignWarnings warnings={designWarnings(layout, designOf(layout).group, stats)} />
               </div>
               <PhonePreview src={previewSrc} own={ownPreview} />
             </div>
@@ -378,6 +396,43 @@ function PhonePreview({ src, own }: { src: string; own: boolean }) {
         )}
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">{own ? "Kendi menünüz" : "Örnek menü"} · kaydırabilirsiniz</p>
+    </div>
+  );
+}
+
+/** Yazı ağırlıklı / Karma / Görsel ağırlıklı sekmeleri; önerilen kategoride yıldız. */
+export function GroupTabs({ value, suggested, onChange }: { value: DesignGroup; suggested?: DesignGroup; onChange: (g: DesignGroup) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
+      {DESIGN_GROUPS.map((g) => (
+        <button
+          key={g.id}
+          type="button"
+          aria-pressed={value === g.id}
+          onClick={() => onChange(g.id)}
+          title={g.hint}
+          className={`rounded-xl px-2 py-2 text-xs font-semibold transition ${value === g.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+        >
+          {g.name}
+          {suggested === g.id && <Sparkles className="ml-1 inline h-3 w-3 text-emerald-600" aria-label="Önerilen" />}
+          <span className="block text-[10px] font-normal text-slate-400">{MENU_DESIGNS.filter((d) => d.group === g.id).length} tasarım</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Seçilen tasarım menüye tam uymuyorsa bilgi notları. */
+export function DesignWarnings({ warnings }: { warnings: string[] }) {
+  if (!warnings.length) return null;
+  return (
+    <div className="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-snug text-amber-900">
+      {warnings.map((w) => (
+        <p key={w} className="flex gap-1.5">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {w}
+        </p>
+      ))}
     </div>
   );
 }

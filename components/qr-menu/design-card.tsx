@@ -3,7 +3,9 @@
 import { Check, ChevronLeft, ChevronRight, Eye, Moon, Rocket, Sun, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { publishDesign, saveDarkModeSettings, saveDesignDraft } from "@/lib/qr-menu/firestore";
-import { MENU_BASE_URL, MENU_DESIGNS, type MenuLayout, type QrMenuSettings } from "@/lib/qr-menu/types";
+import { MENU_BASE_URL, MENU_DESIGNS, type DesignGroup, type MenuLayout, type QrMenuSettings } from "@/lib/qr-menu/types";
+import { designWarnings, type MenuPhotoStats } from "@/lib/qr-menu/wizard";
+import { DesignWarnings, GroupTabs } from "./menu-wizard";
 import { Toggle, primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = {
@@ -16,6 +18,8 @@ type Props = {
    * doğrudan kaydedilir ve menü yayına alındığında kullanılır.
    */
   menuLive: boolean;
+  /** Fotoğraf oranı ve kapak: uymayan tasarımda uyarı için. */
+  stats: MenuPhotoStats;
   onChange: (patch: Partial<QrMenuSettings>) => void;
 };
 
@@ -24,11 +28,12 @@ type Mode = "light" | "dark";
 const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? MENU_DESIGNS[0];
 const thumbUrl = (id: MenuLayout, mode: Mode) => `${MENU_BASE_URL}/designs/${id}-${mode}.jpg`;
 
-export default function DesignCard({ cafeId, settings, savedSlug, menuLive, onChange }: Props) {
+export default function DesignCard({ cafeId, settings, savedSlug, menuLive, stats, onChange }: Props) {
   const live: MenuLayout = settings.layout ?? "classic";
   const liveLabel = menuLive ? "Yayında" : "Seçili";
   const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
   const [thumbMode, setThumbMode] = useState<Mode>("light");
+  const [groupTab, setGroupTab] = useState<DesignGroup>(designOf(live).group);
   const [previewing, setPreviewing] = useState<MenuLayout | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -94,8 +99,10 @@ export default function DesignCard({ cafeId, settings, savedSlug, menuLive, onCh
 
       {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      <GroupTabs value={groupTab} onChange={setGroupTab} />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {MENU_DESIGNS.map((d) => {
+        {MENU_DESIGNS.filter((d) => d.group === groupTab).map((d) => {
           const isLive = d.id === live;
           const isDraft = d.id === draft;
           return (
@@ -151,6 +158,7 @@ export default function DesignCard({ cafeId, settings, savedSlug, menuLive, onCh
           menuLive={menuLive}
           draft={draft}
           canPublish={savedSlug !== null}
+          stats={stats}
           initialMode={settings.defaultMode ?? ("defaultDark" in designOf(previewing) ? "dark" : "light")}
           busy={busy}
           onSaveDraft={saveDraft}
@@ -192,6 +200,7 @@ function DesignPreview({
   menuLive,
   draft,
   canPublish,
+  stats,
   initialMode,
   busy,
   onSaveDraft,
@@ -205,6 +214,7 @@ function DesignPreview({
   menuLive: boolean;
   draft: MenuLayout | null;
   canPublish: boolean;
+  stats: MenuPhotoStats;
   initialMode: Mode;
   busy: boolean;
   onSaveDraft: (id: MenuLayout) => void;
@@ -252,6 +262,9 @@ function DesignPreview({
 
           <h3 className="mt-4 text-2xl font-bold text-slate-900">{design.name}</h3>
           <p className="mt-1 text-sm text-slate-500">{design.description}</p>
+          <div className="mt-3">
+            <DesignWarnings warnings={designWarnings(id, design.group, stats)} />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {id === live && liveChosen && (
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{menuLive ? "Yayında" : "Seçili"}</span>

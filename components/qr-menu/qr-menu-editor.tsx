@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BarChart3,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -36,9 +37,11 @@ import {
 import { MENU_BASE_URL, MENU_DESIGNS, type MenuCategory, type MenuItem, type MenuLayout, type QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
 import MenuWizard from "./menu-wizard";
+import { photoStats } from "@/lib/qr-menu/wizard";
 import DesignCard from "./design-card";
 import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
+import StatsCard from "./stats-card";
 import SetupChecklist from "./setup-checklist";
 import { Collapsible, Field, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
@@ -62,7 +65,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [editing, setEditing] = useState<{ item: MenuItem; isNew: boolean } | null>(null);
   const [categoryForm, setCategoryForm] = useState<MenuCategory | null>(null);
-  const [openSections, setOpenSections] = useState<Record<Section, boolean>>({ settings: false, qr: false, design: false });
+  const [openSections, setOpenSections] = useState<Record<Section, boolean>>({ settings: false, qr: false, design: false, stats: false });
   // Dışarıdan (kurulum listesi) yayına alınınca ayar formu yeni değerle yeniden kurulsun;
   // yoksa form eski "kapalı" değerini tutar ve sonraki kayıtta menüyü geri kapatır.
   const [settingsFormKey, setSettingsFormKey] = useState(0);
@@ -284,6 +287,7 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
             if (pricesUpdatedAt) setSettings((s) => (s ? { ...s, pricesUpdatedAt } : s));
           }}
           logoUrl={logoUrl}
+          heroImage={heroImage}
           settings={settings}
           savedSlug={savedSlug}
           items={items}
@@ -373,9 +377,23 @@ export default function QrMenuEditor({ cafeId, cafeName }: Props) {
               settings={settings}
               savedSlug={savedSlug}
               menuLive={menuLive}
+              stats={photoStats(items, heroImage)}
               onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
             />
           </Collapsible>
+
+          {savedSlug !== null && (
+            <Collapsible
+              id="qr-section-stats"
+              icon={<BarChart3 className="h-4 w-4" />}
+              title="Menü istatistikleri"
+              summary="En çok bakılan ürünler, yoğun saatler, aranıp bulunamayanlar"
+              open={openSections.stats}
+              onOpenChange={(open) => toggleSection("stats", open)}
+            >
+              <StatsCard cafeId={cafeId} items={items} categories={categories} />
+            </Collapsible>
+          )}
         </div>
       )}
 
@@ -651,10 +669,10 @@ const designName = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id)?.na
 function designSummary(settings: QrMenuSettings, menuLive: boolean) {
   const live = settings.layout ?? "classic";
   const draft = settings.layoutDraft && settings.layoutDraft !== live ? settings.layoutDraft : null;
-  return `${menuLive ? "Yayında" : "Seçili"}: ${designName(live)}${draft ? ` · Taslak: ${designName(draft)}` : ""} · 10 tasarım, gece modu`;
+  return `${menuLive ? "Yayında" : "Seçili"}: ${designName(live)}${draft ? ` · Taslak: ${designName(draft)}` : ""} · ${MENU_DESIGNS.length} tasarım, gece modu`;
 }
 
-type Section = "settings" | "qr" | "design";
+type Section = "settings" | "qr" | "design" | "stats";
 
 // Kurulum listesi kapatıldı mı (tarayıcı başına; kaybolursa liste tekrar görünür, zararı yok).
 const dismissKey = (cafeId: string) => `qr-menu-setup-dismissed:${cafeId}`;

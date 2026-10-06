@@ -71,7 +71,7 @@ export default function SetupChecklist({
     },
     {
       title: "Tasarımınızı seçin",
-      detail: designChosen ? `Seçili: ${designName}` : "10 hazır tasarım; seçmezseniz Klasik kullanılır",
+      detail: designChosen ? `Seçili: ${designName}` : `${MENU_DESIGNS.length} hazır tasarım; seçmezseniz Klasik kullanılır`,
       done: designChosen,
       locked: !infoDone,
       action: { label: "Tasarımlar", onClick: onOpenDesigns },
@@ -106,6 +106,11 @@ export default function SetupChecklist({
           <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">
             {doneCount} / {steps.length}
           </span>
+          {live && (
+            <button type="button" onClick={onOpenWizard} className={smallBtnCls}>
+              <Wand2 className="h-3.5 w-3.5" /> Menü Sihirbazı
+            </button>
+          )}
           {live && (
             <button type="button" onClick={onDismiss} aria-label="Listeyi kapat" title="Listeyi kapat" className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-slate-700">
               <X className="h-4 w-4" />

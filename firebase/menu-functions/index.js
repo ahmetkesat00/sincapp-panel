@@ -2,10 +2,11 @@
 //   cd firebase && firebase deploy --only functions:menu
 // Diğer fonksiyonlar (damga, Apple Wallet vb.) cafe_loyalty_app/functions'ta; bu deploy onlara dokunmaz.
 
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { extractMenu, fetchMenuUrl, ExtractError, MODEL } = require("./extract");
+const { handleMenuEvents, aggregateStats } = require("./stats");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -126,3 +127,19 @@ exports.importMenu = onCall(
     }
   },
 );
+
+/** Menü sitesinden anonim kullanım sayaçları (sendBeacon). Kimlik doğrulama yok; girdiler sıkı temizlenir. */
+exports.menuEvents = onRequest({ region: REGION, memory: "256MiB", timeoutSeconds: 15, maxInstances: 10, concurrency: 80 }, (req, res) =>
+  handleMenuEvents(db, req, res),
+);
+
+/** Panel raporu: son 7 veya 30 günün menü istatistikleri (kafe sahibi veya admin). */
+exports.getMenuStats = onCall({ region: REGION, memory: "256MiB", timeoutSeconds: 30 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Giriş yapmalısınız.");
+  const cafeId = String(request.data?.cafeId || "");
+  if (!cafeId) throw new HttpsError("invalid-argument", "cafeId zorunlu.");
+  await assertCanEditCafe(uid, cafeId);
+  const days = Number(request.data?.days) === 30 ? 30 : 7;
+  return aggregateStats(db, cafeId, days);
+});
