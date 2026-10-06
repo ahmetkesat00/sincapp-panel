@@ -119,6 +119,19 @@ export async function saveQrStyle(cafeId: string, style: QrStyle): Promise<void>
   await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.qrStyle": style });
 }
 
+/** Menüdeki damga kartı şablonu ve logo zemini (kaydedildiği an menüye yansır). */
+export async function saveBrandingSettings(
+  cafeId: string,
+  patch: Partial<Pick<QrMenuSettings, "loyaltyCardStyle" | "logoBackground">>,
+): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), Object.fromEntries(Object.entries(patch).map(([k, v]) => [`qrMenu.${k}`, v])));
+}
+
+/** Logonun açık renkli olup olmadığı (otomatik algılama sonucu). */
+export async function saveLogoCheck(cafeId: string, logoUrl: string, isLight: boolean): Promise<void> {
+  await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.logoIsLight": isLight, "qrMenu.logoCheckedFor": logoUrl });
+}
+
 /** Kurulum listesinin "Yayına al" adımı: sadece yayın durumunu değiştirir. */
 export async function setMenuEnabled(cafeId: string, enabled: boolean): Promise<void> {
   await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.enabled": enabled, updatedAt: serverTimestamp() });

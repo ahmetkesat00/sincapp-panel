@@ -4,7 +4,7 @@ import { ExternalLink, Save } from "lucide-react";
 import { useState } from "react";
 import { isValidSlug, slugify } from "@/lib/qr-menu/firestore";
 import { MENU_BASE_URL, type QrMenuSettings } from "@/lib/qr-menu/types";
-import { Field, LocalizedInput, Toggle, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
+import { Field, Toggle, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = {
   cafeName: string;
@@ -74,10 +74,6 @@ export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: P
             Link değişecek: /{savedSlug} → /{s.slug}. Basılı QR kodlar etkilenmez.
           </span>
         )}
-      </Field>
-
-      <Field label="Kısa tanıtım (kapak altında)">
-        <LocalizedInput value={s.tagline} onChange={(v) => set("tagline", v)} placeholder="Nitelikli kahve, ev yapımı tatlılar" showEn={hasEn} />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-3">

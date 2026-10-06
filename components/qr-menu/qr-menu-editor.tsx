@@ -33,6 +33,7 @@ import {
   saveItem,
   saveOrder,
   saveQrStyle,
+  saveLogoCheck,
   saveSettings,
   setMenuEnabled,
   touchPricesUpdatedAt,
@@ -40,11 +41,12 @@ import {
 import type { MenuCategory, MenuItem, QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
 import MenuWizard from "./menu-wizard";
-import { photoStats } from "@/lib/qr-menu/wizard";
+import { isLightLogo, photoStats } from "@/lib/qr-menu/wizard";
 import DesignCard from "./design-card";
 import QrCodesCard from "./qr-codes-card";
 import SettingsCard from "./settings-card";
 import StatsCard from "./stats-card";
+import BrandingCard from "./branding-card";
 import MenuHero from "./menu-hero";
 import MenuStudio from "./menu-studio";
 import { Field, KeepAlive, LocalizedInput, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
@@ -79,6 +81,26 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
   const [studioOpen, setStudioOpen] = useState(false);
   /** Ürün kaydedilince artar: "Menüyü düzenle" önizlemesi yenilensin. */
   const [previewKey, setPreviewKey] = useState(0);
+
+  // Logo açık renkli mi: logo değiştiyse (ya da hiç bakılmadıysa) bir kez hesaplanıp kaydedilir;
+  // menü "Otomatik" logo zemininde buna göre beyaz ya da koyu zemin kullanır.
+  const logoCheckedFor = settings?.logoCheckedFor;
+  const hasSettings = settings !== null;
+  useEffect(() => {
+    if (!logoUrl || !hasSettings || logoCheckedFor === logoUrl) return;
+    let active = true;
+    isLightLogo(logoUrl)
+      .then((isLight) => {
+        if (!active) return;
+        // Önce ekranda göster; kayıt başarısız olsa da panel "inceleniyor"da takılı kalmasın.
+        setSettings((s) => (s ? { ...s, logoIsLight: isLight, logoCheckedFor: logoUrl } : s));
+        return saveLogoCheck(cafeId, logoUrl, isLight);
+      })
+      .catch((err) => console.warn("Logo kontrol edilemedi:", err));
+    return () => {
+      active = false;
+    };
+  }, [cafeId, logoUrl, logoCheckedFor, hasSettings]);
 
   const toggleCategory = (id: string) =>
     setExpanded((prev) => {
@@ -469,6 +491,9 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
                 stats={photoStats(items, heroImage)}
                 onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))}
               />
+              <div className="mt-6">
+                <BrandingCard cafeId={cafeId} settings={settings} logoUrl={logoUrl} onChange={(patch) => setSettings((s) => (s ? { ...s, ...patch } : s))} />
+              </div>
             </KeepAlive>
 
             <KeepAlive active={tab === "qr"}>

@@ -71,6 +71,14 @@ export type QrMenuSettings = {
   darkToggle?: boolean;
   /** Menünün açılış modu; verilmezse tasarımın varsayılanı. */
   defaultMode?: "light" | "dark";
+  /** Damga kartı şablonu: block = blok başlıklı, split = solda kimlik/sağda damgalar (varsayılan block). */
+  loyaltyCardStyle?: "block" | "split";
+  /** Logo zemini: auto = algılanana göre, light = beyaz, dark = markanın koyu rengi. */
+  logoBackground?: "auto" | "light" | "dark";
+  /** Logo açık renkli (beyaz/şeffaf) mi; panel otomatik hesaplar. */
+  logoIsLight?: boolean;
+  /** logoIsLight hangi logo dosyası için hesaplandı (logo değişince yeniden hesaplanır). */
+  logoCheckedFor?: string;
   enabled: boolean;
   slug: string;
   tagline?: LocalizedText;

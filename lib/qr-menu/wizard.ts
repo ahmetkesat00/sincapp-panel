@@ -189,3 +189,36 @@ export function designWarnings(id: MenuLayout, group: DesignGroup, stats: MenuPh
   }
   return warnings;
 }
+
+// ─── Logo açık renkli mi ───
+
+/**
+ * Logo şeffaf zeminli ve içinde neredeyse hiç koyu/renkli öğe yoksa true (beyaz logo): beyaz zeminde
+ * kaybolur, menüde markanın koyu renginde gösterilmeli. Beyaz rozet üstünde renkli yazı olan logolar
+ * (örneğin beyaz daire içinde bordo ad) ve kendi zemini olan JPG logolar false.
+ */
+export async function isLightLogo(logoUrl: string): Promise<boolean> {
+  const img = await loadImage(await loadLogoDataUrl(logoUrl));
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  ctx.drawImage(img, 0, 0, size, size);
+  const { data } = ctx.getImageData(0, 0, size, size);
+  let transparent = 0;
+  let opaque = 0;
+  let content = 0; // koyu ya da belirgin renkli pikseller (yazı, simge)
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) {
+      transparent++;
+      continue;
+    }
+    opaque++;
+    const { s, l } = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+    if (l < 0.6 || (s > 0.35 && l < 0.8)) content++;
+  }
+  if (!opaque || transparent / (transparent + opaque) < 0.08) return false;
+  return content / opaque < 0.03;
+}
