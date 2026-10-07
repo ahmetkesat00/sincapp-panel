@@ -12,6 +12,7 @@ import {
   applyRecipe,
   itemNeeds,
   lineKcal,
+  lineName,
   recipeKcal,
   requestRecipes,
   toDraft,
@@ -351,7 +352,7 @@ function ReviewRow({
             </span>
             <span className="block truncate text-[11px] text-slate-500">
               {draft.recipe.length
-                ? draft.recipe.map((l) => INGREDIENT_BY_ID.get(l.ingredientId)?.tr).join(", ")
+                ? draft.recipe.map(lineName).join(", ")
                 : "Reçete yok — malzeme ekleyin"}
             </span>
           </span>
@@ -460,6 +461,13 @@ function LinesEditor({ lines, onChange, allowNegative }: { lines: RecipeLine[]; 
             <select value={l.ingredientId} onChange={(e) => set(i, { ingredientId: e.target.value })} className={`${inputCls} min-w-0 basis-full !py-1.5 sm:basis-auto sm:flex-1`}>
               <IngredientOptions />
             </select>
+            <input
+              value={l.label ?? ""}
+              onChange={(e) => set(i, { label: e.target.value || undefined })}
+              placeholder="Menüdeki adı"
+              title="Müşterinin içindekilerde göreceği ad (ör. Manyas peyniri). Boşsa katalog adı kullanılır; kalori seçili malzemeden hesaplanır."
+              className={`${inputCls} min-w-0 flex-1 !py-1.5 text-xs sm:!w-36 sm:flex-none`}
+            />
             <AmountInput value={l.amount} allowNegative={allowNegative} onChange={(amount) => set(i, { amount })} />
             <span className="w-6 text-xs text-slate-500">{ing?.unit}</span>
             <span className="ml-auto w-16 text-right text-xs tabular-nums text-slate-600 sm:ml-0">{Math.round(lineKcal(l))} kcal</span>

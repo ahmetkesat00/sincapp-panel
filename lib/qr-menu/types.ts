@@ -108,7 +108,12 @@ export type Ingredient = {
 };
 
 /** Reçete satırı: Kalori Asistanı malzeme kataloğundaki id × miktar (malzemenin biriminde, g ya da ml). */
-export type RecipeLine = { ingredientId: string; amount: number };
+export type RecipeLine = {
+  ingredientId: string;
+  amount: number;
+  /** Menüde görünen ad, katalog adından farklıysa (ör. "Manyas peyniri" → beyaz_peynir değerleriyle hesaplanır). */
+  label?: string;
+};
 
 export type VariantOption = {
   id: string;

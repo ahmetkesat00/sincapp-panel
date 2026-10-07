@@ -15,8 +15,12 @@ const MAX_AMOUNT = 3000;
 const line = {
   type: "object",
   additionalProperties: false,
-  required: ["ingredient", "amount"],
-  properties: { ingredient: { type: "string", enum: IDS }, amount: { type: "number" } },
+  required: ["ingredient", "amount", "label"],
+  properties: {
+    ingredient: { type: "string", enum: IDS },
+    amount: { type: "number" },
+    label: { anyOf: [{ type: "string" }, { type: "null" }] },
+  },
 };
 
 const RECIPE_SCHEMA = {
@@ -71,7 +75,9 @@ Kurallar:
 - recipe: ürünün TEMEL hâlinin (fiyatı yazılan, varsayılan seçimlerle) bir porsiyonu. Gerçekçi gramaj kullan (ör. tek shot espresso 30 ml, duble 60 ml; orta boy latte ~ 60 ml espresso + 250 ml süt; dilim cheesecake ~ 130 g). Ürün adı, açıklaması, kategorisi, porsiyonu ve fiyatı ipucudur. İşletmenin yazdığı içindekiler varsa ona sadık kal.
 - Tatlı, sandviç, kahvaltı tabağı gibi hazırlanan ürünleri temel malzemelerine ayır (cheesecake → krem peynir, şeker, yumurta, krema, bisküvi, tereyağı). Sadece hazır alınan tek parça ürünlerde (kruvasan, simit, waffle) hazır malzemeyi kullan.
 - Kalorisi ihmal edilebilir süsleri (birkaç nane yaprağı, tutam tuz) yazma; ama içeriğe/alerjene etkisi olanları yaz (ör. üstüne serpilen fıstık).
-- Katalogda tam karşılığı olmayan malzeme için en yakınını seç ve note'ta belirt (ör. "Lotus bisküvi yerine Bisküvi kullanıldı").
+- label: müşterinin içindekiler listesinde göreceği ad. Menüde/açıklamada malzemenin özel bir adı geçiyorsa onu yaz (Manyas peyniri, Tulum peyniri, Pizza sosu, Çörek otu, Lotus bisküvi, Mango püresi); kalori için katalogdaki en yakın malzemeyi seç (Manyas peyniri → beyaz_peynir, Pizza sosu → domates, Mango püresi → mango). Katalog adı zaten doğruysa label null.
+- Katalogda tam karşılığı olmayan malzeme için en yakınını seç, label ile gerçek adını ver; kalori farkı belirgin olabilecekse note'ta belirt.
+- Seçenek farklarında (changes) temel reçetedeki bir malzemeyi değiştiriyorsan aynı ingredient ve aynı label'ı kullan.
 - Ürün yiyecek/içecek değilse ya da ne olduğu anlaşılmıyorsa (ör. "Sürpriz menü", "Nargile") recipe boş kalsın, confidence low, note'ta nedenini yaz.
 - options: SADECE ürünle birlikte verilen seçenekler için ve sadece verilen optionId'lerle yaz; seçenek uydurma. Ürünün seçeneği yoksa options boş dizi olsun. Boy seçeneği olmayan bir ürün için boy reçetesi düşünme.
   - Tekli (single) gruplarda İLK seçenek varsayılandır ve temel reçeteye dahildir; onun changes'i boş olmalı. Diğer seçenekler için changes, temel reçeteye göre FARKTIR: artan miktar pozitif, azalan negatif. Ör. Büyük boy: espresso +30, süt +100. Yulaf sütü seçeneği: süt -250, yulaf_sutu +250 (değiştirilen malzemeyi tamamen çıkar, yenisini ekle).
@@ -103,14 +109,18 @@ const clampAmount = (n) => Math.max(-MAX_AMOUNT, Math.min(MAX_AMOUNT, Math.round
 /** Yanıtı doğrular: bilinmeyen ürün/seçenek/malzeme atılır, aynı malzeme birleştirilir. */
 function sanitize(result, items) {
   const byId = new Map(items.map((i) => [i.id, i]));
+  // Aynı malzeme + aynı görünen ad birleştirilir (Manyas ve tulum peyniri ikisi de beyaz_peynir olabilir).
   const merge = (lines, allowNegative) => {
     const sum = new Map();
     for (const l of lines || []) {
       if (!BY_ID.has(l.ingredient) || !Number.isFinite(Number(l.amount))) continue;
-      sum.set(l.ingredient, (sum.get(l.ingredient) || 0) + clampAmount(l.amount));
+      const label = typeof l.label === "string" && l.label.trim() && l.label.trim() !== BY_ID.get(l.ingredient).tr ? l.label.trim().slice(0, 60) : null;
+      const key = `${l.ingredient}|${label ?? ""}`;
+      const prev = sum.get(key);
+      sum.set(key, { ingredientId: l.ingredient, label, amount: (prev?.amount || 0) + clampAmount(l.amount) });
     }
-    return [...sum]
-      .map(([ingredientId, amount]) => ({ ingredientId, amount: Math.round(amount * 10) / 10 }))
+    return [...sum.values()]
+      .map(({ ingredientId, label, amount }) => ({ ingredientId, amount: Math.round(amount * 10) / 10, ...(label ? { label } : {}) }))
       .filter((l) => (allowNegative ? l.amount !== 0 : l.amount > 0));
   };
   const out = [];
