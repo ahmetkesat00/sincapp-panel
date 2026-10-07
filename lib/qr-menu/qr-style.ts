@@ -76,19 +76,69 @@ export function loadLogoDataUrl(logoUrl: string): Promise<string> {
         if (!r.ok) throw new Error(`Logo alınamadı (${r.status})`);
         return r.blob();
       })
-      .then(
-        (blob) =>
-          new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result));
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(blob);
-          }),
-      );
+      .then((blob) => createImageBitmap(blob))
+      .then(roundLogo);
     cached.catch(() => logoCache.delete(logoUrl));
     logoCache.set(logoUrl, cached);
   }
   return cached;
+}
+
+/** Köşeleri saydam mı (şeffaf PNG logo)? */
+function hasTransparentCorners(ctx: CanvasRenderingContext2D, size: number): boolean {
+  const p = Math.max(1, Math.round(size * 0.04));
+  return [
+    [p, p],
+    [size - p, p],
+    [p, size - p],
+    [size - p, size - p],
+  ].some(([x, y]) => ctx.getImageData(x, y, 1, 1).data[3] < 200);
+}
+
+/**
+ * Logoyu QR ortasına yuvarlak köşeli bir rozet olarak hazırlar.
+ * Zemini dolu logolar yuvarlatılarak kırpılır; şeffaf logolar beyaz, yuvarlak köşeli bir plakaya yerleştirilir.
+ */
+function roundLogo(bitmap: ImageBitmap): string {
+  const size = 512;
+  const radius = size * 0.22;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas desteklenmiyor");
+
+  // Önce logoyu kareye "cover" çizip köşelerine bak: dolu zeminli mi, şeffaf mı?
+  const cover = Math.max(size / bitmap.width, size / bitmap.height);
+  const drawCover = () =>
+    ctx.drawImage(bitmap, (size - bitmap.width * cover) / 2, (size - bitmap.height * cover) / 2, bitmap.width * cover, bitmap.height * cover);
+  drawCover();
+  const transparent = hasTransparentCorners(ctx, size) || Math.abs(bitmap.width / bitmap.height - 1) > 0.15;
+  ctx.clearRect(0, 0, size, size);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, radius);
+  ctx.clip();
+  if (transparent) {
+    // Şeffaf ya da kare olmayan logo: kırpmadan, kenar boşluğuyla beyaz plakaya.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+    const pad = size * 0.12;
+    const fit = Math.min((size - pad * 2) / bitmap.width, (size - pad * 2) / bitmap.height);
+    ctx.drawImage(bitmap, (size - bitmap.width * fit) / 2, (size - bitmap.height * fit) / 2, bitmap.width * fit, bitmap.height * fit);
+  } else {
+    drawCover();
+  }
+  ctx.restore();
+  if (transparent) {
+    // Beyaz QR zemininde plakanın yuvarlak hatları görünsün diye ince çerçeve.
+    ctx.lineWidth = size * 0.02;
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.beginPath();
+    ctx.roundRect(ctx.lineWidth / 2, ctx.lineWidth / 2, size - ctx.lineWidth, size - ctx.lineWidth, radius - ctx.lineWidth / 2);
+    ctx.stroke();
+  }
+  return canvas.toDataURL("image/png");
 }
 
 // ─── QR üretimi ───
