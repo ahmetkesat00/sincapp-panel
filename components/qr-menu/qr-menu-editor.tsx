@@ -9,6 +9,7 @@ import {
   ChevronUp,
   Eye,
   EyeOff,
+  Flame,
   Image as ImageIcon,
   LayoutTemplate,
   Pencil,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/qr-menu/firestore";
 import type { MenuCategory, MenuItem, QrMenuSettings } from "@/lib/qr-menu/types";
 import ItemFormModal from "./item-form-modal";
+import CalorieAssistant from "./calorie-assistant";
 import MenuWizard from "./menu-wizard";
 import { isLightLogo, photoStats } from "@/lib/qr-menu/wizard";
 import DesignCard from "./design-card";
@@ -79,6 +81,7 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
   const [settingsFormKey, setSettingsFormKey] = useState(0);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
+  const [calorieOpen, setCalorieOpen] = useState(false);
   /** Ürün kaydedilince artar: "Menüyü düzenle" önizlemesi yenilensin. */
   const [previewKey, setPreviewKey] = useState(0);
 
@@ -391,11 +394,43 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
             <KeepAlive active={tab === "products"}>
               <div className="space-y-5">
                 {items.length > 0 && (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <ComplianceStat count={compliance.noIngredients} label="üründe içindekiler eksik" okLabel="İçindekiler tamam" deadline="Son tarih 31.12.2026" />
-                    <ComplianceStat count={compliance.noCalories} label="üründe kalori eksik" okLabel="Kaloriler tamam" deadline="Son tarih 31.12.2027" />
-                    <ComplianceStat count={compliance.noSource} label="üründe kalori dayanağı yok" okLabel="Kalori dayanakları tamam" deadline="Denetim dosyası" />
+                  <div className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <ComplianceStat count={compliance.noIngredients} label="üründe içindekiler eksik" okLabel="İçindekiler tamam" deadline="Son tarih 31.12.2026" />
+                      <ComplianceStat count={compliance.noCalories} label="üründe kalori eksik" okLabel="Kaloriler tamam" deadline="Son tarih 31.12.2027" />
+                      <ComplianceStat count={compliance.noSource} label="üründe kalori dayanağı yok" okLabel="Kalori dayanakları tamam" deadline="Denetim dosyası" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCalorieOpen(true)}
+                      className="flex w-full items-center gap-3 rounded-xl bg-orange-50 px-3.5 py-2.5 text-left ring-1 ring-orange-100 transition hover:bg-orange-100/70"
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-orange-500 text-white">
+                        <Flame className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-slate-900">Kalori Asistanı</span>
+                        <span className="block text-xs text-slate-500">
+                          Reçeteyi biz önerelim, siz gramajı düzeltin: kalori, içindekiler ve alerjenler birlikte tamamlansın.
+                        </span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-orange-400" />
+                    </button>
                   </div>
+                )}
+
+                {calorieOpen && (
+                  <CalorieAssistant
+                    cafeId={cafeId}
+                    items={items}
+                    categories={categories}
+                    onSaved={(updated) => {
+                      const byId = new Map(updated.map((i) => [i.id, i]));
+                      setItems((prev) => prev.map((i) => byId.get(i.id) ?? i));
+                      setPreviewKey((k) => k + 1);
+                    }}
+                    onClose={() => setCalorieOpen(false)}
+                  />
                 )}
 
                 <div className="flex flex-wrap items-center justify-between gap-3">

@@ -107,6 +107,9 @@ export type Ingredient = {
   pork?: boolean;
 };
 
+/** Reçete satırı: Kalori Asistanı malzeme kataloğundaki id × miktar (malzemenin biriminde, g ya da ml). */
+export type RecipeLine = { ingredientId: string; amount: number };
+
 export type VariantOption = {
   id: string;
   name: LocalizedText;
@@ -114,6 +117,8 @@ export type VariantOption = {
   calorieDelta?: number;
   portion?: string;
   ingredients?: Ingredient[];
+  /** Seçilince temel reçeteye göre fark (azalan miktar negatif). Kalori Asistanı yazar. */
+  recipeDelta?: RecipeLine[];
 };
 
 export type VariantGroup = {
@@ -123,7 +128,7 @@ export type VariantGroup = {
   options: VariantOption[];
 };
 
-export type CalorieSource = "turkomp_recipe" | "supplier_label" | "supplier_recipe" | "lab" | "estimate";
+export type CalorieSource = "usda_recipe" | "turkomp_recipe" | "supplier_label" | "supplier_recipe" | "lab" | "estimate";
 
 export type MenuItem = {
   id: string;
@@ -144,6 +149,8 @@ export type MenuItem = {
     note?: string;
     docs?: string[];
   };
+  /** Varsayılan seçimlerle porsiyon reçetesi (Kalori Asistanı; kalori ve içindekiler bundan hesaplanır). */
+  recipe?: RecipeLine[];
   badges?: ItemBadge[];
   /**
    * false: içindekiler/alerjenler yapay zekâyla içe aktarıldı, işletme henüz kontrol etmedi.
@@ -189,6 +196,7 @@ export const BADGES: { key: ItemBadge; label: string }[] = [
 ];
 
 export const CALORIE_SOURCES: { key: CalorieSource; label: string; hint: string }[] = [
+  { key: "usda_recipe", label: "Reçete × USDA (Kalori Asistanı)", hint: "Onayladığınız reçete gramajları × USDA FoodData Central ortalama değerleri" },
   { key: "turkomp_recipe", label: "Reçete × TürKomp", hint: "Kendi reçetenizin gramajları × TürKomp ortalama değerleri (kılavuzdaki yöntem)" },
   { key: "supplier_label", label: "Tedarikçi etiketi", hint: "Etiketteki kcal/100 g × porsiyon gramı" },
   { key: "supplier_recipe", label: "Tedarikçi reçetesi", hint: "Tedarikçiden alınan gramajlar × TürKomp" },

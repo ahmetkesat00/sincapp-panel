@@ -176,6 +176,9 @@ export async function deleteItem(cafeId: string, itemId: string): Promise<void> 
   await deleteDoc(doc(itemsCol(cafeId), itemId));
 }
 
+/** Birden çok ürünü tek seferde kaydeder (Kalori Asistanı). */
+export const saveItems = (cafeId: string, items: MenuItem[]) => saveImportedMenu(cafeId, [], items);
+
 /** İçe aktarılan menüyü toplu yazar (Firestore toplu yazma sınırı için parça parça). */
 export async function saveImportedMenu(cafeId: string, categories: MenuCategory[], items: MenuItem[]): Promise<void> {
   const writes = [

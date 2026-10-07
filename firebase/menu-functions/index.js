@@ -7,6 +7,7 @@ const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { extractMenu, fetchMenuUrl, ExtractError, MODEL } = require("./extract");
 const { handleMenuEvents, aggregateStats } = require("./stats");
+const { suggestRecipes } = require("./recipes");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -124,6 +125,84 @@ exports.importMenu = onCall(
       if (err instanceof ExtractError) throw new HttpsError("failed-precondition", err.message);
       console.error("importMenu", err);
       throw new HttpsError("internal", "Menü okunamadı. Biraz sonra tekrar deneyin.");
+    }
+  },
+);
+
+/** Kalori Asistanı: tek çağrıda en fazla bu kadar ürün; kafe başına günlük ürün hakkı (adminler hariç). */
+const RECIPE_BATCH = 25;
+const RECIPE_DAILY_ITEMS = 400;
+
+/** Günlük reçete hakkından n ürün düşer; dolmuşsa hata. */
+async function takeRecipeQuota(cafeId, n, refund = false) {
+  const ref = db.collection("menuRecipeQuota").doc(cafeId);
+  const day = todayTR();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const count = snap.exists && snap.data().day === day ? snap.data().count : 0;
+    if (!refund && count + n > RECIPE_DAILY_ITEMS) {
+      throw new HttpsError("resource-exhausted", `Bugünkü kalori asistanı hakkınız doldu (${RECIPE_DAILY_ITEMS} ürün). Yarın devam edebilirsiniz.`);
+    }
+    tx.set(ref, { day, count: Math.max(0, count + (refund ? -n : n)) });
+  });
+}
+
+/**
+ * Kalori Asistanı: { cafeId, itemIds: string[] (≤25) } → { results }.
+ * Ürünler Firestore'dan okunur (panelin gönderdiği metne güvenilmez). Firestore'a yazmaz;
+ * panel reçeteleri gösterir, işletme düzeltip onaylayınca kendisi kaydeder.
+ */
+exports.suggestRecipes = onCall(
+  { region: REGION, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 300, memory: "512MiB", maxInstances: 10 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Giriş yapmalısınız.");
+    const cafeId = String(request.data?.cafeId || "");
+    if (!cafeId) throw new HttpsError("invalid-argument", "cafeId zorunlu.");
+    const role = await assertCanEditCafe(uid, cafeId);
+
+    const raw = request.data?.itemIds;
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > RECIPE_BATCH) {
+      throw new HttpsError("invalid-argument", `Tek seferde 1–${RECIPE_BATCH} ürün gönderilebilir.`);
+    }
+    const ids = [...new Set(raw.map(String))].filter((id) => /^[A-Za-z0-9_-]{1,64}$/.test(id));
+    const cafeRef = db.collection("cafes").doc(cafeId);
+    const [itemSnaps, catSnap] = await Promise.all([
+      db.getAll(...ids.map((id) => cafeRef.collection("menuItems").doc(id))),
+      cafeRef.collection("menuCategories").get(),
+    ]);
+    const items = itemSnaps.filter((s) => s.exists).map((s) => ({ id: s.id, ...s.data() }));
+    if (!items.length) throw new HttpsError("not-found", "Ürünler bulunamadı.");
+    const categoryNames = Object.fromEntries(catSnap.docs.map((d) => [d.id, d.data().name?.tr || ""]));
+
+    if (role !== "admin") await takeRecipeQuota(cafeId, items.length);
+    const startedAt = Date.now();
+    try {
+      const result = await suggestRecipes({ apiKey: ANTHROPIC_API_KEY.value(), items, categoryNames });
+      await db
+        .collection("menuImportLogs")
+        .add({
+          kind: "recipes",
+          cafeId,
+          uid,
+          role,
+          model: result.model || MODEL,
+          inputTokens: result.usage.inputTokens,
+          cacheReadTokens: result.usage.cacheRead,
+          outputTokens: result.usage.outputTokens,
+          costUsd: result.costUsd,
+          items: items.length,
+          ms: Date.now() - startedAt,
+          at: admin.firestore.FieldValue.serverTimestamp(),
+        })
+        .catch((err) => console.error("menuImportLogs", err));
+      return { results: result.results };
+    } catch (err) {
+      if (role !== "admin") await takeRecipeQuota(cafeId, items.length, true).catch((e) => console.error("refund", e));
+      if (err instanceof HttpsError) throw err;
+      if (err instanceof ExtractError) throw new HttpsError("failed-precondition", err.message);
+      console.error("suggestRecipes", err);
+      throw new HttpsError("internal", "Reçeteler hazırlanamadı. Biraz sonra tekrar deneyin.");
     }
   },
 );
