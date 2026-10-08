@@ -3,6 +3,7 @@
 import { Check, ChevronDown, Flame, LoaderCircle, Plus, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { saveItems } from "@/lib/qr-menu/firestore";
+import { validateProduct } from "@/lib/qr-menu/product-tools";
 import {
   INGREDIENT_BY_ID,
   INGREDIENT_CATALOG,
@@ -59,6 +60,8 @@ export default function CalorieAssistant({ cafeId, items, categories, onSaved, o
   const [onlyCheck, setOnlyCheck] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+  /** Kaydedilemeyen ürünler: "Ürün adı: neden". */
+  const [skipped, setSkipped] = useState<string[]>([]);
 
   const needing = useMemo(() => items.filter((i) => Object.values(itemNeeds(i)).some(Boolean)), [items]);
   const complete = items.length - needing.length;
@@ -134,17 +137,38 @@ export default function CalorieAssistant({ cafeId, items, categories, onSaved, o
   const save = async () => {
     setPhase("saving");
     setError("");
+    // Üründe asistandan bağımsız eski bir sorun varsa (ör. varsayılan seçeneğin fiyat farkı) o ürün atlanır,
+    // diğerleri kaydedilir; atlananlar adıyla gösterilir.
+    const updated: MenuItem[] = [];
+    const invalid: string[] = [];
+    for (const { item, write } of writes) {
+      const next = applyRecipe(item, entries[item.id].draft, write);
+      const problem = validateProduct(next);
+      if (problem) invalid.push(`${item.name.tr}: ${problem}`);
+      else updated.push(next);
+    }
+    const saved: MenuItem[] = [];
     try {
-      const updated = writes.map(({ item, write }) => applyRecipe(item, entries[item.id].draft, write));
-      await saveItems(cafeId, updated);
-      onSaved(updated);
-      setSavedCount(updated.length);
-      setPhase("done");
+      // Veri katmanı tek işlemde en fazla 450 kayıt yazar; büyük menüler parça parça kaydedilir.
+      for (let i = 0; i < updated.length; i += 400) {
+        const chunk = updated.slice(i, i + 400);
+        await saveItems(cafeId, chunk);
+        saved.push(...chunk);
+      }
     } catch (err) {
       console.error("calorie assistant save", err);
-      setError("Kaydedilemedi, tekrar deneyin.");
+      if (saved.length) onSaved(saved);
+      setSkipped(invalid);
+      setError(
+        `${saved.length ? `${saved.length} ürün kaydedildi, kalanlar kaydedilemedi` : "Kaydedilemedi"}: ${err instanceof Error ? err.message : "bağlantı sorunu"}. Tekrar deneyin.`,
+      );
       setPhase("review");
+      return;
     }
+    if (saved.length) onSaved(saved);
+    setSkipped(invalid);
+    setSavedCount(saved.length);
+    setPhase("done");
   };
 
   const reviewIds = items.filter((i) => entries[i.id]).map((i) => i.id);
@@ -287,6 +311,16 @@ export default function CalorieAssistant({ cafeId, items, categories, onSaved, o
                   Kalori, içindekiler ve alerjenler menünüze yansıdı. Reçeteler ürünlerde &quot;kalori dayanağı&quot; olarak saklandı.
                 </p>
               </div>
+              {skipped.length > 0 && (
+                <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-left text-xs text-amber-900">
+                  <p className="flex items-center gap-1.5 font-bold">
+                    <TriangleAlert className="h-3.5 w-3.5" /> {skipped.length} ürün kaydedilmedi; ürün formunda düzeltip tekrar deneyin:
+                  </p>
+                  {skipped.map((s) => (
+                    <p key={s}>• {s}</p>
+                  ))}
+                </div>
+              )}
               <button type="button" className={primaryBtnCls} onClick={onClose}>
                 Tamam
               </button>

@@ -2,25 +2,24 @@
 
 import { Rocket, X } from "lucide-react";
 import { useState } from "react";
-import { MENU_BASE_URL, type QrMenuSettings } from "@/lib/qr-menu/types";
 import { primaryBtnCls, smallBtnCls } from "./ui";
+import MenuPreview, { type PreviewData } from "./menu-preview";
+import { useDialog } from "./use-dialog";
 
 /** Menünün müşteriye görüneceği hâli (henüz kapalıyken de) ve yayına alma onayı. */
 export default function PublishPreview({
-  slug,
-  settings,
   onPublish,
   onClose,
+  previewData,
 }: {
-  slug: string;
-  settings: QrMenuSettings;
   onPublish: () => Promise<void>;
   onClose: () => void;
+  previewData: PreviewData;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Taslak tasarım değil, yayına girecek olan gösterilir.
-  const src = `${MENU_BASE_URL}/${slug}?tasarim=${settings.layout ?? "classic"}&onizleme=1`;
+  const [ready, setReady] = useState(false);
+  const ref = useDialog(() => { if (!busy) onClose(); });
 
   const publish = async () => {
     setBusy(true);
@@ -36,14 +35,14 @@ export default function PublishPreview({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4">
-      <div className="relative flex w-full max-w-3xl flex-col gap-6 rounded-3xl bg-white p-5 shadow-2xl md:flex-row md:p-8">
+      <div ref={ref} role="dialog" aria-modal="true" aria-label="Yayın önizlemesi" tabIndex={-1} className="relative flex w-full max-w-3xl flex-col gap-6 rounded-3xl bg-white p-5 shadow-2xl outline-none md:flex-row md:p-8">
         <button type="button" onClick={onClose} aria-label="Kapat" className="absolute right-4 top-4 rounded-xl p-2 text-slate-500 hover:bg-slate-100">
           <X className="h-5 w-5" />
         </button>
 
         <div className="mx-auto shrink-0">
-          <div className="h-[640px] w-[320px] overflow-hidden rounded-[44px] border-[10px] border-slate-900 bg-slate-100 shadow-xl">
-            <iframe src={src} title="Menü önizleme" className="h-full w-full border-0" />
+          <div className="h-[min(640px,65dvh)] w-[min(320px,calc(100vw-80px))] overflow-hidden rounded-[44px] border-[10px] border-slate-900 bg-slate-100 shadow-xl">
+            <MenuPreview data={previewData} onReady={() => setReady(true)} />
           </div>
         </div>
 
@@ -52,16 +51,12 @@ export default function PublishPreview({
           <p className="mt-2 text-sm text-slate-500">
             Telefonda kaydırarak kontrol edin. Ürün adı, fiyat veya fotoğrafta bir eksik görürseniz kapatıp düzeltebilirsiniz.
           </p>
-          <ul className="mt-4 space-y-1.5 text-sm text-slate-600">
-            <li>• Yayına aldığınızda menü linkiniz ve QR kodlarınız çalışmaya başlar.</li>
-            <li>• Sonradan yaptığınız her değişiklik menüye anında yansır.</li>
-            <li>• İstediğiniz zaman Menü ayarlarından yayından kaldırabilirsiniz.</li>
-          </ul>
+          <p className="mt-4 text-sm text-slate-600">Yayınladığınızda QR kodlarınız menüyü açar. Sonraki ürün değişiklikleri kaydedildiğinde, müşterinin menüyü yeniden açmasına yansır.</p>
 
           {error && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
           <div className="mt-auto flex flex-wrap gap-2 pt-8">
-            <button type="button" className={primaryBtnCls} disabled={busy} onClick={publish}>
+            <button type="button" className={primaryBtnCls} disabled={busy || !ready} onClick={publish}>
               <Rocket className="h-4 w-4" />
               {busy ? "Yayına alınıyor…" : "Menüyü yayına al"}
             </button>

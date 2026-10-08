@@ -7,6 +7,8 @@ import { DESIGN_GROUPS, MENU_BASE_URL, MENU_DESIGNS, type DesignGroup, type Menu
 import { designWarnings, paletteFromLogo, photoStats, suggestDesigns, themeQuery, type LogoPalette } from "@/lib/qr-menu/wizard";
 import MenuImport from "./menu-import";
 import { primaryBtnCls, smallBtnCls } from "./ui";
+import MenuPreview, { type PreviewData } from "./menu-preview";
+import { useDialog } from "./use-dialog";
 
 type Props = {
   cafeId: string;
@@ -23,10 +25,11 @@ type Props = {
   items: MenuItem[];
   categories: MenuCategory[];
   /** Seçimleri kaydeder; publish: menüyü de yayına al. */
-  onFinish: (next: QrMenuSettings, publish: boolean) => Promise<void>;
+  onFinish: (next: QrMenuSettings, publish: boolean, pending: { categories: MenuCategory[]; items: MenuItem[] }, media: Partial<Record<"logoUrl" | "heroImage", File>>) => Promise<void>;
   /** Ürün yoksa sihirbaz bitince ürün eklemeye yönlendirir. */
   onGoToProducts: () => void;
   onClose: () => void;
+  previewData: PreviewData;
 };
 
 type ColorChoice = "logo" | "design" | "custom";
@@ -39,7 +42,16 @@ const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? ME
  * Menü Sihirbazı: sağdan açılan, adım adım kurulum. Logo ve içerikten tasarım ile renk önerir,
  * sonunda tek seferde kaydeder (ve istenirse yayına alır).
  */
-export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl, heroImage, settings, savedSlug, items, categories, onFinish, onGoToProducts, onClose }: Props) {
+export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl: initialLogo, heroImage: initialHero, settings, savedSlug, items: existingItems, categories: existingCategories, onFinish, onGoToProducts, onClose, previewData }: Props) {
+  const [media, setMedia] = useState<Partial<Record<"logoUrl" | "heroImage", File>>>({});
+  const [mediaPreview, setMediaPreview] = useState<Partial<Record<"logoUrl" | "heroImage", string>>>({});
+  const logoUrl = mediaPreview.logoUrl ?? initialLogo;
+  const heroImage = mediaPreview.heroImage ?? initialHero;
+  const [pending, setPending] = useState<{ categories: MenuCategory[]; items: MenuItem[] }>({ categories: [], items: [] });
+  const items = [...existingItems.filter((i) => !pending.items.some((p) => p.id === i.id)), ...pending.items];
+  const categories = [...existingCategories, ...pending.categories];
+  const [previewReady, setPreviewReady] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const visibleCount = items.filter((i) => i.isVisible).length;
   const photoCount = items.filter((i) => i.isVisible && i.imageUrl).length;
   const suggestion = useMemo(() => suggestDesigns(items, categories), [items, categories]);
@@ -62,11 +74,17 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
   };
   const [logo, setLogo] = useState<LogoPalette | null>(null);
   const [logoState, setLogoState] = useState<"idle" | "loading" | "error">(logoUrl ? "loading" : "idle");
-  const [colorChoice, setColorChoice] = useState<ColorChoice>(logoUrl ? "logo" : "design");
+  const [colorChoice, setColorChoice] = useState<ColorChoice>(savedSlug ? "custom" : logoUrl ? "logo" : "design");
   const [custom, setCustom] = useState<MenuTheme>(settings.theme);
   const [saving, setSaving] = useState<"" | "save" | "publish">("");
   const [error, setError] = useState("");
   const [done, setDone] = useState<null | "saved" | "published">(null);
+  const close = () => {
+    if (saving || importBusy) return;
+    if (!done && (step > 0 || pending.items.length > 0 || Object.keys(media).length > 0 || slug !== (savedSlug ?? settings.slug)) && !window.confirm("Kaydedilmemiş seçimleriniz ve içe aktarılan ürünler kaybolacak. Çıkılsın mı?")) return;
+    onClose();
+  };
+  const dialogRef = useDialog(close);
 
   useEffect(() => {
     if (!logoUrl) return;
@@ -96,17 +114,28 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
   }, [themeKey]);
 
   // Ürün varsa ve link kayıtlıysa kafenin kendi menüsü, yoksa örnek menü.
-  const ownPreview = savedSlug !== null && visibleCount > 0;
-  const previewSrc = `${MENU_BASE_URL}/${ownPreview ? `${savedSlug}?onizleme=1&` : "ornek?"}tasarim=${layout}&${themeQuery(previewTheme)}`;
+  const ownPreview = items.length > 0;
+  const previewSrc = `${MENU_BASE_URL}/ornek?tasarim=${layout}&${themeQuery(previewTheme)}`;
 
   const slugOk = isValidSlug(slug);
-  const canNext = step !== 0 || slugOk;
+  const canNext = !importBusy && (step !== 0 || slugOk);
+  const localPreview: PreviewData = { ...previewData, cafe: { ...previewData.cafe, logoUrl, heroImage, qrMenu: { ...settings, slug, layout, theme: previewTheme } }, categories, items: items.filter((i) => i.isVisible) };
+  const chooseMedia = (field: "logoUrl" | "heroImage", file?: File) => {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) { setError("JPG, PNG veya WEBP seçin (en fazla 3 MB)."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { setMedia((prev) => ({ ...prev, [field]: file })); setMediaPreview((prev) => ({ ...prev, [field]: String(reader.result) })); setError(""); };
+    reader.onerror = () => setError("Görsel açılamadı.");
+    reader.readAsDataURL(file);
+  };
 
   const finish = async (publish: boolean) => {
     setSaving(publish ? "publish" : "save");
     setError("");
     try {
-      await onFinish({ ...settings, slug, layout, layoutDraft: undefined, theme, enabled: publish ? true : settings.enabled }, publish);
+      if (publish && (!previewReady || !visibleCount)) throw new Error("Önce kendi menünüzün önizlemesini kontrol edin.");
+      await onFinish({ ...settings, slug, layout, layoutDraft: undefined, theme, enabled: publish ? true : settings.enabled }, publish, pending, media);
+      onImported(pending.categories, pending.items, pending.items.length ? new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }) : null);
       setDone(publish ? "published" : "saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kaydedilemedi, tekrar deneyin.");
@@ -116,12 +145,15 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onClick={close}>
       <aside
         role="dialog"
+        ref={dialogRef}
+        aria-modal="true"
+        tabIndex={-1}
         aria-label="Menü Sihirbazı"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-[600px] flex-col bg-white shadow-2xl"
+        className="flex h-full w-full max-w-[600px] flex-col bg-white shadow-2xl outline-none"
       >
         {/* ── Başlık ve adımlar ── */}
         <div className="border-b border-slate-200 px-6 py-4">
@@ -132,7 +164,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
               </span>
               <h2 className="text-lg font-bold text-slate-900">Menü Sihirbazı</h2>
             </div>
-            <button type="button" onClick={onClose} aria-label="Kapat" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+            <button type="button" onClick={close} disabled={Boolean(saving) || importBusy} aria-label="Kapat" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -152,6 +184,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
 
         {/* ── İçerik ── */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {error && !done && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           {done ? (
             <Finished published={done === "published"} hasProducts={visibleCount > 0} onGoToProducts={onGoToProducts} onClose={onClose} />
           ) : step === 0 ? (
@@ -185,7 +218,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                       <>
                         <p className="font-medium text-slate-900">Logo yüklenmemiş</p>
                         <p className="text-xs text-slate-500">
-                          &quot;İşletme Yönetimi&quot; sekmesinden logonuzu ekleyin; menünün renklerini logonuza göre önerebilelim.
+                          Daha sonra İşletme Yönetimi&apos;nden ekleyebilirsiniz; şimdi hazır renklerle devam edin.
                         </p>
                       </>
                     )}
@@ -193,6 +226,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                 </div>
               </section>
 
+              <div className="grid gap-3 sm:grid-cols-2">{(["logoUrl", "heroImage"] as const).map((field) => <label key={field} className="rounded-xl border border-dashed p-3 text-xs text-slate-600"><span className="mb-2 block font-semibold">{field === "logoUrl" ? "Logo ekle / değiştir" : "Kapak fotoğrafı ekle"}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { chooseMedia(field, e.target.files?.[0]); e.target.value = ""; }} className="w-full text-xs" /></label>)}</div><p className="text-xs text-slate-400">İsteğe bağlı · En fazla 3 MB · Son onayda kaydedilir.</p>
               <section className="space-y-2">
                 <p className="text-sm font-semibold text-slate-900">Menünüz</p>
                 <MenuImport
@@ -200,7 +234,10 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                   existingCategoryCount={categories.length}
                   existingItemCount={items.length}
                   menuLive={menuLive}
-                  onImported={onImported}
+                  existingCategories={existingCategories}
+                  existingItems={existingItems}
+                  onBusyChange={setImportBusy}
+                  onImported={(newCategories, newItems) => setPending({ categories: newCategories, items: newItems })}
                 />
                 {items.length > 0 ? (
                   <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
@@ -252,7 +289,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                   ))}
                 <DesignWarnings warnings={designWarnings(layout, designOf(layout).group, stats)} />
               </div>
-              <PhonePreview src={previewSrc} own={ownPreview} />
+              <PhonePreview src={previewSrc} own={ownPreview} data={localPreview} onReady={() => setPreviewReady(true)} />
             </div>
           ) : step === 2 ? (
             <div className="grid gap-5 sm:grid-cols-[1fr_auto]">
@@ -317,7 +354,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                   </div>
                 )}
               </div>
-              <PhonePreview src={previewSrc} own={ownPreview} />
+              <PhonePreview src={previewSrc} own={ownPreview} data={localPreview} onReady={() => setPreviewReady(true)} />
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-[1fr_auto]">
@@ -337,9 +374,8 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                     Menünüzü yayına almak için en az bir ürün ekleyin. Şimdi seçimlerinizi kaydedip ürün eklemeye geçebilirsiniz.
                   </p>
                 )}
-                {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
               </div>
-              <PhonePreview src={previewSrc} own={ownPreview} />
+              <PhonePreview src={previewSrc} own={ownPreview} data={localPreview} onReady={() => setPreviewReady(true)} />
             </div>
           )}
         </div>
@@ -347,7 +383,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
         {/* ── Alt düğmeler ── */}
         {!done && (
           <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
-            <button type="button" className={smallBtnCls} onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>
+            <button type="button" disabled={Boolean(saving) || importBusy} className={smallBtnCls} onClick={() => (step === 0 ? close() : setStep(step - 1))}>
               <ChevronLeft className="h-3.5 w-3.5" /> {step === 0 ? "Vazgeç" : "Geri"}
             </button>
             {step < STEPS.length - 1 ? (
@@ -359,7 +395,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                 <button type="button" className={smallBtnCls} disabled={!!saving} onClick={() => finish(false)}>
                   {saving === "save" ? "Kaydediliyor…" : "Sadece kaydet"}
                 </button>
-                <button type="button" className={primaryBtnCls} disabled={!!saving} onClick={() => finish(true)}>
+                <button type="button" className={primaryBtnCls} disabled={!!saving || !previewReady} onClick={() => finish(true)}>
                   <Rocket className="h-4 w-4" /> {saving === "publish" ? "Yayına alınıyor…" : "Kaydet ve yayına al"}
                 </button>
               </div>
@@ -376,20 +412,20 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
 }
 
 /** Seçilen tasarım ve renklerle küçük telefon önizlemesi (menü telefon genişliğinde, 320 px, çizilip küçültülür). */
-function PhonePreview({ src, own }: { src: string; own: boolean }) {
+function PhonePreview({ src, own, data, onReady }: { src: string; own: boolean; data: PreviewData; onReady: () => void }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => setLoading(true), [src]);
   return (
     <div className="mx-auto w-[240px] shrink-0">
       <div className="relative h-[480px] w-[240px] overflow-hidden rounded-[32px] border-8 border-slate-900 bg-slate-100 shadow-lg">
-        <iframe
+        {own ? <MenuPreview data={data} onReady={onReady} className="h-[663px] w-[320px] origin-top-left scale-[0.7] border-0" /> : <iframe
           key={src}
           src={src}
           title="Menü önizleme"
           onLoad={() => setLoading(false)}
           className="h-[663px] w-[320px] origin-top-left scale-[0.7] border-0"
-        />
-        {loading && (
+        />}
+        {!own && loading && (
           <div className="absolute inset-0 grid place-items-center bg-white/60">
             <LoaderCircle className="h-5 w-5 animate-spin text-slate-400" />
           </div>

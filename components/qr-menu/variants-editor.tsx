@@ -8,12 +8,14 @@ import IngredientsEditor from "./ingredients-editor";
 import { LocalizedInput, inputCls, numberOrUndefined, smallBtnCls } from "./ui";
 
 type Props = {
+  basePrice: number;
+  onDefaultChange: (groupId: string, optionId: string) => void;
   value: VariantGroup[];
   onChange: (v: VariantGroup[]) => void;
   showEn: boolean;
 };
 
-export default function VariantsEditor({ value, onChange, showEn }: Props) {
+export default function VariantsEditor({ basePrice, onDefaultChange, value, onChange, showEn }: Props) {
   const updateGroup = (gi: number, patch: Partial<VariantGroup>) =>
     onChange(value.map((g, i) => (i === gi ? { ...g, ...patch } : g)));
 
@@ -46,11 +48,7 @@ export default function VariantsEditor({ value, onChange, showEn }: Props) {
             </button>
           </div>
 
-          {group.selection === "single" && (
-            <p className="mt-2 text-[11px] text-slate-400">
-              İlk seçenek varsayılandır; fiyat ve kalori farkı 0 olmalı. Ürünün ana fiyatı/kalorisi bu seçeneğe göre girilir.
-            </p>
-          )}
+          {group.selection === "single" && <label className="mt-2 block text-xs text-slate-500">Varsayılan seçenek<select className={`${inputCls} mt-1`} value={group.options[0]?.id ?? ""} onChange={(e) => onDefaultChange(group.id, e.target.value)}>{group.options.map((o) => <option key={o.id} value={o.id}>{o.name.tr || "Adsız seçenek"}</option>)}</select></label>}
 
           <div className="mt-3 space-y-2">
             {group.options.map((opt, oi) => (
@@ -59,6 +57,8 @@ export default function VariantsEditor({ value, onChange, showEn }: Props) {
                 option={opt}
                 isDefault={group.selection === "single" && oi === 0}
                 showEn={showEn}
+                basePrice={basePrice}
+                single={group.selection === "single"}
                 onChange={(patch) => updateOption(gi, oi, patch)}
                 onDelete={() => updateGroup(gi, { options: group.options.filter((_, i) => i !== oi) })}
               />
@@ -79,7 +79,7 @@ export default function VariantsEditor({ value, onChange, showEn }: Props) {
         value=""
         onChange={(e) => {
           const tpl = VARIANT_TEMPLATES.find((t) => t.key === e.target.value);
-          if (tpl) onChange([...value, tpl.build()]);
+          if (tpl) { const built = tpl.build(); if (!value.some((g) => g.id === built.id)) onChange([...value, built]); }
         }}
         className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none"
       >
@@ -100,12 +100,15 @@ function OptionRow({
   showEn,
   onChange,
   onDelete,
+  basePrice, single,
 }: {
   option: VariantOption;
   isDefault: boolean;
   showEn: boolean;
   onChange: (patch: Partial<VariantOption>) => void;
   onDelete: () => void;
+  basePrice: number;
+  single: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ingredientCount = option.ingredients?.length ?? 0;
@@ -129,11 +132,14 @@ function OptionRow({
           />
         )}
         <label className="flex items-center gap-1 text-xs text-slate-500">
-          +₺
+          {single ? "₺" : "+₺"}
           <input
             type="number"
-            value={option.priceDelta}
-            onChange={(e) => onChange({ priceDelta: Number(e.target.value) || 0 })}
+            min={single ? 0 : undefined}
+            step="0.01"
+            disabled={isDefault}
+            value={single ? Math.round((basePrice + option.priceDelta) * 100) / 100 : option.priceDelta}
+            onChange={(e) => onChange({ priceDelta: single ? Math.round((Number(e.target.value) - basePrice) * 100) / 100 : Number(e.target.value) || 0 })}
             className={`${inputCls} w-20`}
           />
         </label>
@@ -141,6 +147,7 @@ function OptionRow({
           ±kcal
           <input
             type="number"
+            disabled={isDefault}
             value={option.calorieDelta ?? ""}
             onChange={(e) => onChange({ calorieDelta: numberOrUndefined(e.target.value) })}
             className={`${inputCls} w-20`}
@@ -160,7 +167,7 @@ function OptionRow({
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           Bileşen ({ingredientCount})
         </button>
-        <button type="button" aria-label="Seçeneği sil" onClick={onDelete} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600">
+        <button type="button" aria-label="Seçeneği sil" disabled={isDefault} title={isDefault ? "Silmek için önce başka bir varsayılan seçenek seçin" : "Seçeneği sil"} onClick={onDelete} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
           <Trash2 className="h-4 w-4" />
         </button>
       </div>

@@ -17,6 +17,8 @@ import {
 import IngredientsEditor from "./ingredients-editor";
 import { ChipToggle, Field, LocalizedInput, Toggle, inputCls, numberOrUndefined, primaryBtnCls } from "./ui";
 import VariantsEditor from "./variants-editor";
+import { validateProduct } from "@/lib/qr-menu/product-tools";
+import { useDialog } from "./use-dialog";
 
 type Props = {
   cafeId: string;
@@ -44,6 +46,8 @@ function normalize(item: MenuItem): { item: MenuItem; error?: string } {
   }));
   const next = { ...item, ingredients, variants: variants.length ? variants : undefined };
 
+  const validation = validateProduct(next);
+  if (validation) return { item: next, error: validation };
   if (!item.name.tr.trim()) return { item: next, error: "Ürün adı (TR) zorunlu." };
   if (!item.categoryId) return { item: next, error: "Kategori seçin." };
   if (!(item.price >= 0)) return { item: next, error: "Geçerli bir fiyat girin." };
@@ -67,10 +71,17 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
   const isSupplier = calorieSource === "supplier_label" || calorieSource === "supplier_recipe" || calorieSource === "estimate";
 
   const warnings = [
-    item.ingredients.filter((i) => i.name.tr.trim()).length === 0 && "İçindekiler boş — 31.12.2026'dan itibaren zorunlu.",
-    item.calories === undefined && "Kalori girilmemiş — 31.12.2027'den itibaren zorunlu.",
-    item.calories !== undefined && !calorieSource && "Kalorinin dayanağını (hesap yöntemi) seçin; denetimde sorulabilir.",
+    item.ingredients.filter((i) => i.name.tr.trim()).length === 0 && "İçindekiler eksik",
+    item.calories === undefined && "Kalori eksik",
+    item.calories !== undefined && !calorieSource && "Kalori hesap yöntemi eksik",
   ].filter(Boolean) as string[];
+
+  const close = () => {
+    if (saving || uploading) return;
+    if (JSON.stringify(item) !== JSON.stringify(initial) && !window.confirm("Kaydedilmemiş ürün değişiklikleri kaybolacak. Çıkılsın mı?")) return;
+    onClose();
+  };
+  const dialogRef = useDialog(close);
 
   const applyCrop = async () => {
     if (!cropSrc || !cropPixels) return;
@@ -107,15 +118,16 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:p-8">
-      <div className="w-full max-w-3xl rounded-3xl bg-white shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={isNew ? "Yeni ürün" : "Ürünü düzenle"} tabIndex={-1} className="w-full max-w-3xl rounded-3xl bg-white shadow-2xl outline-none">
         <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-3xl border-b border-slate-200 bg-white px-6 py-4">
           <h3 className="text-base font-bold text-slate-900">{isNew ? "Yeni ürün" : item.name.tr || "Ürünü düzenle"}</h3>
-          <button type="button" onClick={onClose} aria-label="Kapat" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+          <button type="button" onClick={close} aria-label="Kapat" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="space-y-6 p-6">
+          {item.priceNeedsReview && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Fiyat okunamadı. Gerçek fiyatı girip kaydedin; sonra ürünü görünür yapabilirsiniz.</p>}
           {warnings.length > 0 && (
             <div className="space-y-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
               {warnings.map((w) => (
@@ -129,7 +141,7 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
 
           {/* ── Temel ── */}
           <section className="grid gap-5 sm:grid-cols-[160px_1fr]">
-            <div>
+            <div className="w-32 sm:w-auto">
               <span className="mb-1 block text-xs font-semibold text-slate-700">Görsel</span>
               <label className="relative flex aspect-[4/3] cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:bg-slate-100">
                 {item.imageUrl ? (
@@ -160,7 +172,7 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
             </div>
 
             <div className="space-y-4">
-              <Field label="Ürün adı" hint="Tercihi etkileyen bileşeni adda belirtin: 'Tost' değil 'Kaşarlı Tost' (Kılavuz 22.24).">
+              <Field label="Ürün adı" hint="Örnek: Kaşarlı tost, yulaf sütlü latte.">
                 <LocalizedInput value={item.name} onChange={(v) => set("name", v)} placeholder="Caffè Latte" showEn={showEn} />
               </Field>
               <Field label="Açıklama">
@@ -177,7 +189,7 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
                   </select>
                 </Field>
                 <Field label="Fiyat (₺, KDV dahil)" hint="Seçenek varsa varsayılan seçimin fiyatı.">
-                  <input type="number" min={0} value={item.price} onChange={(e) => set("price", Number(e.target.value))} className={inputCls} />
+                  <input type="number" min={0} step="0.01" value={item.price} onChange={(e) => setItem((prev) => ({ ...prev, price: Number(e.target.value), priceNeedsReview: false }))} className={inputCls} />
                 </Field>
                 <Field label="Porsiyon" hint="ör. 250 ml, 1 dilim (130 g)">
                   <input value={item.portion ?? ""} onChange={(e) => set("portion", e.target.value || undefined)} className={inputCls} />
@@ -190,6 +202,7 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
           <section className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl bg-slate-50 px-4 py-3">
             <Toggle checked={item.isVisible} onChange={(v) => set("isVisible", v)} label="Menüde görünsün" />
             <Toggle checked={item.isAvailable} onChange={(v) => set("isAvailable", v)} label={item.isAvailable ? "Satışta" : "Tükendi"} />
+            <details className="w-full"><summary className="cursor-pointer text-sm font-semibold">Sadakat ve etiketler</summary><div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1.5">
               {BADGES.map((b) => (
                 <ChipToggle key={b.key} active={!!item.badges?.includes(b.key)} tone="amber" onClick={() => set("badges", toggleIn(item.badges, b.key))}>
@@ -219,13 +232,13 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
                 ))}
               </select>
             </label>
+            </div></details>
           </section>
 
           {/* ── İçindekiler ── */}
-          <section>
-            <h4 className="text-sm font-bold text-slate-900">İçindekiler</h4>
+          <details open={initial.allergensConfirmed === false}><summary className="cursor-pointer text-sm font-bold text-slate-900">İçindekiler ve alerjenler</summary><div className="mt-3">
             <p className="mb-3 text-xs text-slate-500">
-              Alerjen, alkol ve domuz kaynaklı bileşenler menüde vurgulanır (Kılavuz 41.5). Seçeneğe bağlı bileşenleri (süt türü, şurup) aşağıda seçeneklerin içine ekleyin.
+              Malzemeleri ekleyin, alerjenleri işaretleyin. Süt türü gibi değişen bileşenleri ilgili seçeneğe ekleyin.
             </p>
             {item.allergensConfirmed === false && (
               <label className="mb-3 flex items-start gap-2.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm text-violet-900">
@@ -237,17 +250,23 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
               </label>
             )}
             <IngredientsEditor value={item.ingredients} onChange={(v) => set("ingredients", v)} showEn={showEn} />
-          </section>
+          </div></details>
 
           {/* ── Seçenekler ── */}
-          <section>
-            <h4 className="text-sm font-bold text-slate-900">Seçenekler</h4>
+          <details><summary className="cursor-pointer text-sm font-bold text-slate-900">Boy ve ekstralar</summary><div className="mt-3">
             <p className="mb-3 text-xs text-slate-500">Boy, süt türü, ekstralar. Her seçenek fiyatı, kaloriyi ve bileşenleri değiştirebilir.</p>
-            <VariantsEditor value={item.variants ?? []} onChange={(v) => set("variants", v)} showEn={showEn} />
-          </section>
+            <VariantsEditor basePrice={item.price} value={item.variants ?? []} onChange={(v) => set("variants", v)} onDefaultChange={(groupId, optionId) => {
+              const group = item.variants?.find((g) => g.id === groupId);
+              const chosen = group?.options.find((o) => o.id === optionId);
+              if (!group || !chosen) return;
+              const delta = chosen.priceDelta;
+              const kcal = chosen.calorieDelta ?? 0;
+              setItem((prev) => ({ ...prev, price: Math.round((prev.price + delta) * 100) / 100, calories: prev.calories === undefined ? undefined : prev.calories + kcal, recipe: undefined, variants: prev.variants?.map((g) => g.id !== groupId ? g : { ...g, options: [chosen, ...g.options.filter((o) => o.id !== optionId)].map((o) => ({ ...o, priceDelta: Math.round((o.priceDelta - delta) * 100) / 100, calorieDelta: (o.calorieDelta ?? 0) - kcal, recipeDelta: undefined })) }) }));
+            }} showEn={showEn} />
+          </div></details>
 
           {/* ── Kalori ── */}
-          <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
+          <details className="rounded-2xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-bold text-slate-900">Besin bilgileri ve hesap yöntemi</summary><div className="mt-3 space-y-4">
             <div>
               <h4 className="text-sm font-bold text-slate-900">Kalori</h4>
               <p className="text-xs text-slate-500">
@@ -306,13 +325,13 @@ export default function ItemFormModal({ cafeId, item: initial, isNew, categories
                 </Field>
               </div>
             )}
-          </section>
+          </div></details>
 
           {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         </div>
 
         <div className="sticky bottom-0 flex justify-end gap-3 rounded-b-3xl border-t border-slate-200 bg-white px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={close} className="rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Vazgeç
           </button>
           <button type="button" onClick={submit} disabled={saving || uploading} className={primaryBtnCls}>

@@ -145,6 +145,7 @@ export function toMenuRecords(
         name: { tr: i.name, ...(i.nameEn ? { en: i.nameEn } : {}) },
         ...(i.description ? { description: { tr: i.description } } : {}),
         price: base,
+        ...(!sizes.length && i.price === null ? { priceNeedsReview: true } : {}),
         ingredients,
         ...(variants.length ? { variants } : {}),
         ...(i.dietTags.length ? { dietTags: i.dietTags } : {}),
@@ -152,7 +153,7 @@ export function toMenuRecords(
         ...(i.calories !== null ? { calories: i.calories } : {}),
         allergensConfirmed: false,
         isAvailable: true,
-        isVisible: visible,
+        isVisible: visible && (sizes.length > 0 || i.price !== null),
         sortOrder: ii,
       });
     });

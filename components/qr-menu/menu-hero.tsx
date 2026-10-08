@@ -4,6 +4,7 @@ import { ArrowRight, Check, ChevronRight, Copy, ExternalLink, Rocket, Smartphone
 import { useState } from "react";
 import { MENU_BASE_URL, MENU_DESIGNS, type QrMenuSettings } from "@/lib/qr-menu/types";
 import PublishPreview from "./publish-preview";
+import type { PreviewData } from "./menu-preview";
 
 type Props = {
   /** Üstteki başlık; admin sayfasında kafe adı verilir. */
@@ -18,6 +19,7 @@ type Props = {
   onOpenStudio?: () => void;
   onAddProductsManually: () => void;
   onPublish: () => Promise<void>;
+  previewData: PreviewData;
 };
 
 const formatDate = (iso: string) => {
@@ -29,7 +31,7 @@ const formatDate = (iso: string) => {
  * QR Menü sekmesinin başı: başlık, Menü Sihirbazı (işletmeyi buraya yönlendiriyoruz),
  * menü durumu/linki, kısa bilgiler ve menü yayında değilse tek bir "sıradaki adım".
  */
-export default function MenuHero({ title, settings, savedSlug, categoryCount, itemCount, visibleItemCount, onOpenWizard, onOpenStudio, onAddProductsManually, onPublish }: Props) {
+export default function MenuHero({ title, settings, savedSlug, categoryCount, itemCount, visibleItemCount, onOpenWizard, onOpenStudio, onAddProductsManually, onPublish, previewData }: Props) {
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const live = savedSlug !== null && settings.enabled;
@@ -94,15 +96,15 @@ export default function MenuHero({ title, settings, savedSlug, categoryCount, it
         <div className="flex shrink-0 flex-col gap-2 md:min-w-[290px]">
         <button
           type="button"
-          onClick={onOpenWizard}
+          onClick={live ? onAddProductsManually : onOpenWizard}
           className="group flex shrink-0 items-center gap-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 px-5 py-4 text-left text-white shadow-lg shadow-emerald-700/20 transition hover:shadow-xl hover:shadow-emerald-700/25 md:min-w-[290px]"
         >
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/15 ring-1 ring-white/20">
-            <Wand2 className="h-5 w-5" />
+            {live ? <Smartphone className="h-5 w-5" /> : <Wand2 className="h-5 w-5" />}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-base font-bold">Menü Sihirbazı</span>
-            <span className="block text-xs text-emerald-50/90">Menünü yükle, tasarla, yayına al</span>
+            <span className="block text-base font-bold">{live ? "Ürünleri düzenle" : "Menünü oluştur"}</span>
+            <span className="block text-xs text-emerald-50/90">{live ? "Fiyat, fotoğraf ve satış durumunu güncelle" : "Menünü yükle veya elle oluştur"}</span>
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 transition group-hover:translate-x-0.5" />
         </button>
@@ -113,10 +115,12 @@ export default function MenuHero({ title, settings, savedSlug, categoryCount, it
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800"
           >
             <Smartphone className="h-4 w-4 text-emerald-600" />
-            Menüyü düzenle
+            Tasarımı düzenle
             <span className="text-xs font-normal text-slate-400">· canlı önizleme</span>
           </button>
         )}
+        {live && <button type="button" onClick={onOpenWizard} className="py-1 text-xs font-semibold text-slate-500 hover:text-emerald-700">Dosya veya linkten ürün içe aktar</button>}
+        {!live && <button type="button" onClick={onAddProductsManually} className="py-1 text-xs font-semibold text-slate-500 hover:text-emerald-700">Elle ürün ekle</button>}
         </div>
       </div>
 
@@ -156,8 +160,7 @@ export default function MenuHero({ title, settings, savedSlug, categoryCount, it
 
       {previewing && savedSlug && (
         <PublishPreview
-          slug={savedSlug}
-          settings={settings}
+          previewData={previewData}
           onPublish={async () => {
             await onPublish();
             setPreviewing(false);

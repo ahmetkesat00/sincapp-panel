@@ -5,12 +5,13 @@ import { useState } from "react";
 import { isValidSlug, slugify } from "@/lib/qr-menu/firestore";
 import { MENU_BASE_URL, type QrMenuSettings } from "@/lib/qr-menu/types";
 import { Field, Toggle, inputCls, primaryBtnCls, smallBtnCls } from "./ui";
+type EditableSettings = Pick<QrMenuSettings, "enabled" | "slug" | "phone" | "wifi" | "locales">;
 
 type Props = {
   cafeName: string;
   initial: QrMenuSettings;
   savedSlug: string | null;
-  onSave: (settings: QrMenuSettings) => Promise<void>;
+  onSave: (settings: Partial<EditableSettings>) => Promise<void>;
 };
 
 export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: Props) {
@@ -18,10 +19,12 @@ export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: P
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [touched, setTouched] = useState<Set<keyof EditableSettings>>(new Set());
 
-  const set = <K extends keyof QrMenuSettings>(key: K, value: QrMenuSettings[K]) => {
+  const set = <K extends keyof EditableSettings>(key: K, value: QrMenuSettings[K]) => {
     setS((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
+    setTouched((prev) => new Set(prev).add(key));
   };
 
   const hasEn = s.locales.includes("en");
@@ -32,7 +35,8 @@ export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: P
     setError("");
     setSaving(true);
     try {
-      await onSave(s);
+      await onSave(Object.fromEntries(Array.from(touched).map((key) => [key, s[key]])) as Partial<EditableSettings>);
+      setTouched(new Set());
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ayarlar kaydedilemedi.");
@@ -98,31 +102,9 @@ export default function SettingsCard({ cafeName, initial, savedSlug, onSave }: P
       </div>
 
       <div className="flex flex-wrap items-end gap-6">
-        <div>
-          <span className="mb-1 block text-xs font-semibold text-slate-700">Tema renkleri</span>
-          <div className="flex gap-3">
-            {(
-              [
-                ["primary", "Ana"],
-                ["primaryDark", "Koyu"],
-                ["accent", "Vurgu"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-1.5 text-xs text-slate-600">
-                <input
-                  type="color"
-                  value={s.theme[key]}
-                  onChange={(e) => set("theme", { ...s.theme, [key]: e.target.value })}
-                  className="h-8 w-10 cursor-pointer rounded-lg border border-slate-200"
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        </div>
         <Toggle checked={hasEn} onChange={(v) => set("locales", v ? ["tr", "en"] : ["tr"])} label="İngilizce menü" />
         <p className="text-xs text-slate-500">
-          Fiyat güncelleme tarihi: <span className="font-semibold text-slate-700">{new Date(`${s.pricesUpdatedAt}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}</span>
+          Fiyat güncelleme tarihi: <span className="font-semibold text-slate-700">{new Date(`${initial.pricesUpdatedAt}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}</span>
         </p>
       </div>
 

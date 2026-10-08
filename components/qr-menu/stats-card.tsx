@@ -24,7 +24,7 @@ export type MenuStats = {
 
 const getMenuStats = httpsCallable<{ cafeId: string; days: 7 | 30 }, MenuStats>(functions, "getMenuStats");
 
-type Props = { cafeId: string; items: MenuItem[]; categories: MenuCategory[] };
+type Props = { cafeId: string; items: MenuItem[]; categories: MenuCategory[]; onEditItem?: (id: string) => void };
 
 const top = (counts: Record<string, number>, n: number) =>
   Object.entries(counts)
@@ -41,7 +41,7 @@ function filterLabel(key: string) {
 }
 
 /** Menü istatistikleri: anonim sayaçlardan son 7/30 gün (menü sitesi → menuEvents → menuStats). */
-export default function StatsCard({ cafeId, items, categories }: Props) {
+export default function StatsCard({ cafeId, items, categories, onEditItem }: Props) {
   const [days, setDays] = useState<7 | 30>(7);
   const [stats, setStats] = useState<MenuStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,13 +107,13 @@ export default function StatsCard({ cafeId, items, categories }: Props) {
   return (
     <div className="space-y-5">
       {header}
-      <StatsBody stats={stats} days={days} items={items} categories={categories} />
+      <StatsBody stats={stats} days={days} items={items} categories={categories} onEditItem={onEditItem} />
     </div>
   );
 }
 
 /** Rapor gövdesi (veriden bağımsız; yükleme ve dönem seçimi StatsCard'da). */
-export function StatsBody({ stats, days, items, categories }: { stats: MenuStats; days: 7 | 30; items: MenuItem[]; categories: MenuCategory[] }) {
+export function StatsBody({ stats, days, items, categories, onEditItem }: { stats: MenuStats; days: 7 | 30; items: MenuItem[]; categories: MenuCategory[]; onEditItem?: (id: string) => void }) {
   const itemName = (id: string) => items.find((i) => i.id === id)?.name.tr ?? "Silinmiş ürün";
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name.tr ?? "Silinmiş kategori";
   const productViews = Object.values(stats.items).reduce((a, b) => a + b, 0);
@@ -155,7 +155,7 @@ export function StatsBody({ stats, days, items, categories }: { stats: MenuStats
 
       <div className="grid gap-5 lg:grid-cols-2">
         <ChartBox title="En çok bakılan ürünler" hint="Ürüne tıklanıp ayrıntısı açılma sayısı">
-          <Rows rows={top(stats.items, 10).map(([id, n]) => ({ label: itemName(id), value: n }))} empty="Henüz ürün incelenmedi." />
+          <Rows rows={top(stats.items, 10).map(([id, n]) => ({ label: itemName(id), value: n, onClick: items.some((i) => i.id === id) ? () => onEditItem?.(id) : undefined }))} empty="Henüz ürün incelenmedi." />
         </ChartBox>
         <ChartBox title="Kategorilere ulaşma" hint="Müşterinin kaydırarak ya da sekmeden ulaştığı kategoriler">
           <Rows rows={top(stats.cats, 10).map(([id, n]) => ({ label: categoryName(id), value: n }))} empty="Henüz veri yok." />
@@ -171,7 +171,7 @@ export function StatsBody({ stats, days, items, categories }: { stats: MenuStats
         />
         <ListBox
           title="Tükendiyken bakılanlar"
-          hint="Bitmiş ürüne gelen ilgi, yani kaçan talep."
+          hint="Tükenmiş ürünlerin ayrıntısının açılma sayısı; satış talebi anlamına gelmez."
           rows={top(stats.soldOut, 10).map(([id, n]) => ({ label: itemName(id), value: n }))}
           empty="Tükenmiş ürüne bakılmadı."
         />
@@ -242,7 +242,7 @@ function Columns({ values, labels, tooltip, labelEvery }: { values: number[]; la
 }
 
 /** Yatay çubuklar: ad solda, değer sağda, çubuk altta. */
-function Rows({ rows, empty }: { rows: { label: string; value: number }[]; empty: string }) {
+function Rows({ rows, empty }: { rows: { label: string; value: number; onClick?: () => void }[]; empty: string }) {
   if (!rows.length) return <p className="text-xs text-slate-400">{empty}</p>;
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
@@ -250,7 +250,7 @@ function Rows({ rows, empty }: { rows: { label: string; value: number }[]; empty
       {rows.map((r) => (
         <li key={r.label} className="group">
           <div className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="truncate text-slate-700">{r.label}</span>
+            {r.onClick ? <button type="button" onClick={r.onClick} className="truncate text-left text-emerald-700 hover:underline" title="Ürünü düzenle">{r.label}</button> : <span className="truncate text-slate-700">{r.label}</span>}
             <span className="shrink-0 font-semibold tabular-nums text-slate-900">{r.value}</span>
           </div>
           <div className="mt-1 h-2 rounded-full bg-slate-100">

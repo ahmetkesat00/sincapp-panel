@@ -141,6 +141,8 @@ export type MenuItem = {
   name: LocalizedText;
   description?: LocalizedText;
   price: number;
+  /** Okunamayan fiyat: kontrol edilene kadar ürün gizli tutulur. */
+  priceNeedsReview?: boolean;
   imageUrl?: string;
   ingredients: Ingredient[];
   variants?: VariantGroup[];

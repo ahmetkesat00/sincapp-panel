@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -14,6 +15,8 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import type { QrStyle } from "./qr-style";
 import { DEFAULT_SETTINGS, type MenuCategory, type MenuItem, type MenuLayout, type QrMenuSettings } from "./types";
+import { validateProduct } from "./product-tools";
+import type { PreviewData } from "@/components/qr-menu/menu-preview";
 
 // Firestore `undefined` alanları kabul etmez; formdan gelen boş opsiyonel alanları temizler.
 function clean<T>(value: T): T {
@@ -23,7 +26,7 @@ function clean<T>(value: T): T {
 const categoriesCol = (cafeId: string) => collection(db, "cafes", cafeId, "menuCategories");
 const itemsCol = (cafeId: string) => collection(db, "cafes", cafeId, "menuItems");
 
-export const today = () => new Date().toISOString().slice(0, 10);
+export const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
 
 /** "Kahve Durağı Moda" → "kahve-duragi-moda". Sadece a-z, 0-9 ve tire (QR ve URL dostu). */
 export function slugify(input: string): string {
@@ -39,12 +42,13 @@ export function slugify(input: string): string {
 }
 
 // Menü sitesinde sabit sayfalara ayrılmış adresler (/ornek: tasarım önizlemesindeki örnek menü, /q: basılı QR, /api).
-const RESERVED_SLUGS = new Set(["ornek", "api", "designs"]);
+const RESERVED_SLUGS = new Set(["ornek", "api", "designs", "preview", "menu-bulunamadi"]);
 
 export const isValidSlug = (s: string) =>
   /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) && s.length >= 3 && s.length <= 48 && !RESERVED_SLUGS.has(s);
 
 export type LoadedMenu = {
+  previewCafe: PreviewData["cafe"];
   settings: QrMenuSettings;
   hasSettings: boolean;
   /** Masa kartlarında kullanılır. */
@@ -61,7 +65,10 @@ export async function loadQrMenu(cafeId: string, cafeName: string): Promise<Load
     getDocs(itemsCol(cafeId)),
   ]);
   const stored = cafeSnap.data()?.qrMenu as QrMenuSettings | undefined;
+  const cafeData = cafeSnap.data();
+  const location = cafeData?.location as { latitude?: number; longitude?: number } | undefined;
   return {
+    previewCafe: { id: cafeId, name: cafeName, qrMenu: stored ?? { ...DEFAULT_SETTINGS, slug: slugify(cafeName) }, address: cafeData?.address, instagramUrl: cafeData?.instagramUrl, workingHours: cafeData?.workingHours, location: location?.latitude !== undefined && location?.longitude !== undefined ? { lat: location.latitude, lng: location.longitude } : undefined, loyaltyCards: (cafeData?.loyaltyCards ?? []).map((card: { id: string; itemTypeId: string; rewardBuy: number; rewardGift: number }) => ({ id: card.id, itemTypeId: card.itemTypeId, rewardBuy: card.rewardBuy, rewardGift: card.rewardGift })) },
     settings: stored ?? { ...DEFAULT_SETTINGS, slug: slugify(cafeName) },
     hasSettings: Boolean(stored),
     logoUrl: (cafeSnap.data()?.logoUrl as string | undefined) || undefined,
@@ -79,19 +86,24 @@ export async function loadQrMenu(cafeId: string, cafeName: string): Promise<Load
  * Ayarları kaydeder ve slug'ı menuSlugs'a yazar. Eski slug kaydı silinmez:
  * menü sitesi eski linke gelen ziyaretçiyi güncel slug'a yönlendirir.
  */
-export async function saveSettings(cafeId: string, settings: QrMenuSettings): Promise<void> {
+export async function saveSettings(cafeId: string, settings: QrMenuSettings, pending?: { categories: MenuCategory[]; items: MenuItem[] }, media?: { logoUrl?: string; heroImage?: string }): Promise<void> {
   if (!isValidSlug(settings.slug)) {
     throw new Error("Link adı en az 3 karakter olmalı; sadece küçük harf, rakam ve tire içerebilir.");
   }
   const slugRef = doc(db, "menuSlugs", settings.slug);
-  const existing = await getDoc(slugRef);
-  if (existing.exists() && existing.data().cafeId !== cafeId) {
-    throw new Error(`"${settings.slug}" başka bir işletme tarafından kullanılıyor.`);
+  if ((pending?.categories.length ?? 0) + (pending?.items.length ?? 0) > 450) throw new Error("Tek işlemde en fazla 450 kategori ve ürün seçin.");
+  for (const item of pending?.items ?? []) {
+    const error = validateProduct(item);
+    if (error) throw new Error(`${item.name.tr}: ${error}`);
   }
-  if (!existing.exists()) {
-    await setDoc(slugRef, { cafeId, createdAt: serverTimestamp() });
-  }
-  await updateDoc(doc(db, "cafes", cafeId), { qrMenu: clean(settings), updatedAt: serverTimestamp() });
+  await runTransaction(db, async (transaction) => {
+    const existing = await transaction.get(slugRef);
+    if (existing.exists() && existing.data().cafeId !== cafeId) throw new Error(`"${settings.slug}" başka bir işletme tarafından kullanılıyor.`);
+    if (!existing.exists()) transaction.set(slugRef, { cafeId, createdAt: serverTimestamp() });
+    transaction.update(doc(db, "cafes", cafeId), { qrMenu: clean(settings), ...media, updatedAt: serverTimestamp() });
+    for (const { id, ...data } of pending?.categories ?? []) transaction.set(doc(categoriesCol(cafeId), id), clean(data));
+    for (const { id, ...data } of pending?.items ?? []) transaction.set(doc(itemsCol(cafeId), id), clean(data));
+  });
 }
 
 // ─── Menü tasarımı: taslak → yayın ───
@@ -134,6 +146,10 @@ export async function saveLogoCheck(cafeId: string, logoUrl: string, isLight: bo
 
 /** Kurulum listesinin "Yayına al" adımı: sadece yayın durumunu değiştirir. */
 export async function setMenuEnabled(cafeId: string, enabled: boolean): Promise<void> {
+  if (enabled) {
+    const snapshot = await getDocs(itemsCol(cafeId));
+    if (!snapshot.docs.some((d) => d.data().isVisible === true && d.data().priceNeedsReview !== true)) throw new Error("Yayınlamak için fiyatı kontrol edilmiş en az bir görünür ürün ekleyin.");
+  }
   await updateDoc(doc(db, "cafes", cafeId), { "qrMenu.enabled": enabled, updatedAt: serverTimestamp() });
 }
 
@@ -164,11 +180,13 @@ export async function deleteCategory(cafeId: string, categoryId: string, itemIds
 }
 
 export async function saveItem(cafeId: string, item: MenuItem): Promise<void> {
+  const error = validateProduct(item);
+  if (error) throw new Error(error);
   const { id, ...data } = item;
   await setDoc(doc(itemsCol(cafeId), id), clean(data));
 }
 
-export async function patchItem(cafeId: string, itemId: string, patch: Partial<Pick<MenuItem, "isAvailable" | "isVisible">>) {
+export async function patchItem(cafeId: string, itemId: string, patch: Partial<Pick<MenuItem, "isAvailable" | "isVisible" | "price" | "priceNeedsReview">>) {
   await updateDoc(doc(itemsCol(cafeId), itemId), patch);
 }
 
@@ -181,15 +199,26 @@ export const saveItems = (cafeId: string, items: MenuItem[]) => saveImportedMenu
 
 /** İçe aktarılan menüyü toplu yazar (Firestore toplu yazma sınırı için parça parça). */
 export async function saveImportedMenu(cafeId: string, categories: MenuCategory[], items: MenuItem[]): Promise<void> {
+  for (const item of items) {
+    const error = validateProduct(item);
+    if (error) throw new Error(`${item.name.tr}: ${error}`);
+  }
   const writes = [
     ...categories.map(({ id, ...data }) => ({ ref: doc(categoriesCol(cafeId), id), data })),
     ...items.map(({ id, ...data }) => ({ ref: doc(itemsCol(cafeId), id), data })),
   ];
-  for (let i = 0; i < writes.length; i += 400) {
-    const batch = writeBatch(db);
-    for (const w of writes.slice(i, i + 400)) batch.set(w.ref, clean(w.data));
-    await batch.commit();
-  }
+  if (writes.length > 450) throw new Error("Tek işlemde en fazla 450 kategori ve ürün kaydedilebilir. Daha küçük bir seçim yapın.");
+  const batch = writeBatch(db);
+  for (const w of writes) batch.set(w.ref, clean(w.data));
+  await batch.commit();
+}
+
+/** Durum değişiklikleri tek işlemde tamamlanır. */
+export async function patchItems(cafeId: string, ids: string[], patch: Partial<Pick<MenuItem, "isAvailable" | "isVisible">>): Promise<void> {
+  if (ids.length > 450) throw new Error("Bir seferde en fazla 450 ürün seçin.");
+  const batch = writeBatch(db);
+  for (const id of ids) batch.update(doc(itemsCol(cafeId), id), patch);
+  await batch.commit();
 }
 
 /** Sıralamayı toplu günceller (yukarı/aşağı taşıma sonrası). */
@@ -204,4 +233,12 @@ export async function uploadItemImage(cafeId: string, file: Blob): Promise<strin
   const storageRef = ref(storage, `cafes/${cafeId}/qrmenu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
   await uploadBytes(storageRef, file, { contentType: "image/jpeg" });
   return getDownloadURL(storageRef);
+}
+
+export async function uploadMenuBranding(cafeId: string, file: File, field: "logoUrl" | "heroImage"): Promise<string> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) throw new Error("JPG, PNG veya WEBP seçin (en fazla 3 MB).");
+  const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const target = ref(storage, `cafes/${cafeId}/qrmenu_${field}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${extension}`);
+  await uploadBytes(target, file, { contentType: file.type });
+  return getDownloadURL(target);
 }

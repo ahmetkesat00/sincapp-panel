@@ -1,296 +1,145 @@
 "use client";
 
-import { Check, ChevronDown, FileText, Image as ImageIcon, Link2, LoaderCircle, Sparkles, TriangleAlert, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { saveImportedMenu, touchPricesUpdatedAt } from "@/lib/qr-menu/firestore";
+import { Check, LoaderCircle, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ACCEPTED_FILES, MAX_FILES, readMenu, toMenuRecords, type ImportedMenu } from "@/lib/qr-menu/import";
+import { normalizeSearch } from "@/lib/qr-menu/product-tools";
 import type { MenuCategory, MenuItem } from "@/lib/qr-menu/types";
-import { inputCls, primaryBtnCls } from "./ui";
+import { inputCls, primaryBtnCls, smallBtnCls } from "./ui";
 
 type Props = {
   cafeId: string;
   existingCategoryCount: number;
   existingItemCount: number;
+  existingCategories: MenuCategory[];
+  existingItems: MenuItem[];
   menuLive: boolean;
-  onImported: (categories: MenuCategory[], items: MenuItem[], pricesUpdatedAt: string | null) => void;
+  onImported: (categories: MenuCategory[], items: MenuItem[], date: null) => void;
+  onBusyChange: (busy: boolean) => void;
 };
+type Action = "add" | "update" | "skip";
 
-type Phase = "idle" | "reading" | "preview" | "saving" | "done";
-
-const formatPrice = (n: number | null) => (n === null ? "?" : `₺${n.toLocaleString("tr-TR")}`);
-
-/** Menü Sihirbazı 1. adım: PDF/fotoğraf/link yükle → yapay zekâ okusun → önizle → ekle. */
-export default function MenuImport({ cafeId, existingCategoryCount, existingItemCount, menuLive, onImported }: Props) {
+/** Okuma ve düzeltme yerel taslaktır; kayıt sihirbazın son onayında yapılır. */
+export default function MenuImport({ cafeId, existingCategoryCount, existingItemCount, existingCategories, existingItems, menuLive, onImported, onBusyChange }: Props) {
   const [mode, setMode] = useState<"file" | "url">("file");
   const [files, setFiles] = useState<File[]>([]);
   const [url, setUrl] = useState("");
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "done">("idle");
   const [error, setError] = useState("");
   const [menu, setMenu] = useState<ImportedMenu | null>(null);
-  const [added, setAdded] = useState(0);
+  const [actions, setActions] = useState<Record<string, Action>>({});
+  const [categoryTargets, setCategoryTargets] = useState<Record<number, string>>({});
   const [elapsed, setElapsed] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
+  const [added, setAdded] = useState(0);
   useEffect(() => {
+    onBusyChange(phase === "reading");
     if (phase !== "reading") return;
     const started = Date.now();
-    const t = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
-    return () => clearInterval(t);
-  }, [phase]);
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [phase, onBusyChange]);
 
-  const addFiles = (list: FileList | null) => {
-    if (!list) return;
-    const accepted = [...list].filter((f) => ACCEPTED_FILES.split(",").includes(f.type));
-    if (accepted.length < list.length) setError("Sadece PDF, JPG, PNG veya WEBP yükleyebilirsiniz.");
-    else setError("");
-    setFiles((prev) => [...prev, ...accepted].slice(0, MAX_FILES));
+  const matches = (ci: number, ii: number) => {
+    if (!menu) return [];
+    const cat = menu.categories[ci];
+    const categoryId = categoryTargets[ci];
+    return existingItems.filter((item) => item.categoryId === categoryId && normalizeSearch(item.name.tr) === normalizeSearch(cat.items[ii].name));
   };
-
-  const canRead = mode === "file" ? files.length > 0 : /^https?:\/\/\S+\.\S+/.test(url.trim());
-
   const read = async () => {
-    setPhase("reading");
-    setError("");
-    setElapsed(0);
+    setPhase("reading"); setElapsed(0); setError(""); onBusyChange(true);
     try {
       const result = await readMenu(cafeId, mode === "file" ? { files } : { url: url.trim() });
-      if (!result.menu.categories.some((c) => c.items.length)) {
-        throw new Error("Bu kaynakta menü bulunamadı. Menünün okunaklı bir fotoğrafını veya PDF'ini deneyin.");
-      }
-      setMenu(result.menu);
-      setPhase("preview");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Menü okunamadı.");
-      setPhase("idle");
-    }
+      if (!result.menu.categories.some((c) => c.items.length)) throw new Error("Menü bulunamadı. Okunaklı bir fotoğraf veya PDF deneyin.");
+      const targets: Record<number, string> = {};
+      const initialActions: Record<string, Action> = {};
+      result.menu.categories.forEach((c, ci) => {
+        const matchedCategories = existingCategories.filter((x) => normalizeSearch(x.name.tr) === normalizeSearch(c.name));
+        targets[ci] = matchedCategories.length === 1 ? matchedCategories[0].id : "";
+        c.items.forEach((i, ii) => {
+          const duplicate = existingItems.some((x) => x.categoryId === targets[ci] && normalizeSearch(x.name.tr) === normalizeSearch(i.name));
+          initialActions[`${ci}:${ii}`] = duplicate ? "skip" : "add";
+        });
+      });
+      setCategoryTargets(targets); setActions(initialActions); setMenu(result.menu); setPhase("preview");
+    } catch (err) { setError(err instanceof Error ? err.message : "Menü okunamadı."); setPhase("idle"); }
   };
 
-  const save = async () => {
+  const updatePrice = (ci: number, ii: number, value: string, size?: number) => {
+    const price = value.trim() === "" ? null : Number(value);
+    setMenu((prev) => prev ? { ...prev, categories: prev.categories.map((c, cIndex) => cIndex !== ci ? c : { ...c, items: c.items.map((item, iIndex) => iIndex !== ii ? item : size === undefined ? { ...item, price } : { ...item, sizes: item.sizes.map((s, si) => si === size ? { ...s, price: price as number } : s) }) }) } : prev);
+  };
+
+  const prepare = () => {
     if (!menu) return;
-    setPhase("saving");
     setError("");
-    try {
-      const { categories, items } = toMenuRecords(menu, cafeId, { startOrder: existingCategoryCount, visible: !menuLive });
-      await saveImportedMenu(cafeId, categories, items);
-      const date = await touchPricesUpdatedAt(cafeId).catch(() => null);
-      onImported(categories, items, date);
-      setAdded(items.length);
-      setPhase("done");
-    } catch (err) {
-      console.error("import save", err);
-      setError("Ürünler kaydedilemedi, tekrar deneyin.");
-      setPhase("preview");
+    const chosen = menu.categories.map((c, ci) => ({ ...c, items: c.items.filter((_i, ii) => actions[`${ci}:${ii}`] !== "skip") }));
+    const records = toMenuRecords({ ...menu, categories: chosen }, cafeId, { startOrder: existingCategoryCount, visible: !menuLive });
+    const categories: MenuCategory[] = [];
+    const items: MenuItem[] = [];
+    for (let ci = 0; ci < chosen.length; ci++) {
+      const category = records.categories[ci];
+      const target = categoryTargets[ci];
+      const imported = records.items.filter((i) => i.categoryId === category.id);
+      if (!imported.length) continue;
+      if (!target) categories.push({ ...category, sortOrder: existingCategoryCount + categories.length });
+      const originals = existingItems.filter((i) => i.categoryId === target);
+      let nextOrder = originals.reduce((max, i) => Math.max(max, i.sortOrder + 1), 0);
+      let index = 0;
+      for (let ii = 0; ii < menu.categories[ci].items.length; ii++) {
+        const action = actions[`${ci}:${ii}`];
+        if (action === "skip") continue;
+        const item = imported[index++];
+        const source = menu.categories[ci].items[ii];
+        if (source.sizes.some((s) => s.price === null || !Number.isFinite(s.price) || s.price < 0) || (source.price !== null && (!Number.isFinite(source.price) || source.price < 0))) { setError(`${source.name}: fiyatları kontrol edin.`); return; }
+        if (action === "update") {
+          const candidates = matches(ci, ii);
+          if (candidates.length !== 1) { setError(`${source.name}: güncellenecek ürün tek olarak eşleşmiyor. Yeni ekleyin veya atlayın.`); return; }
+          const previous = candidates[0];
+          const sizeGroup = item.variants?.[0];
+          const previousSize = previous.variants?.find((g) => g.id === "size" || normalizeSearch(g.name.tr) === "boy");
+          const sizesChanged = Boolean(sizeGroup);
+          const variants = sizeGroup ? [...(previous.variants ?? []).filter((g) => g.id !== previousSize?.id), { ...sizeGroup, id: previousSize?.id ?? sizeGroup.id, options: sizeGroup.options.map((o) => ({ ...previousSize?.options.find((p) => normalizeSearch(p.name.tr) === normalizeSearch(o.name.tr)), ...o })) }] : previous.variants;
+          items.push({ ...previous, name: item.name, description: item.description ?? previous.description, price: item.price, priceNeedsReview: item.priceNeedsReview ?? false, variants, ...(sizesChanged ? { allergensConfirmed: false, recipe: undefined } : {}), isVisible: item.priceNeedsReview ? false : previous.isVisible });
+        } else items.push({ ...item, categoryId: target || category.id, sortOrder: target ? nextOrder++ : item.sortOrder });
+      }
     }
+    if (!items.length) { setError("En az bir ürün seçin."); return; }
+    if (categories.length + items.length > 450) { setError("Tek işlemde en fazla 450 kategori ve ürün seçebilirsiniz."); return; }
+    if (new Set(items.map((i) => i.id)).size !== items.length) { setError("Aynı mevcut ürünü birden fazla kez güncellemeyi seçtiniz. Fazla satırı atlayın."); return; }
+    onImported(categories, items, null); setAdded(items.length); setPhase("done");
   };
 
-  const reset = () => {
-    setMenu(null);
-    setFiles([]);
-    setUrl("");
-    setPhase("idle");
-  };
-
-  if (phase === "done") {
-    return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-        <p className="flex items-center gap-2 text-sm font-bold text-emerald-800">
-          <Check className="h-4 w-4" /> {added} ürün menünüze eklendi
-        </p>
-        <p className="mt-1 text-xs text-emerald-900/80">
-          {menuLive
-            ? "Menünüz yayında olduğu için ürünler gizli eklendi; kontrol edip ürün listesinden görünür yapabilirsiniz."
-            : "İçindekiler ve alerjenler yapay zekâ önerisidir; yayına almadan önce ürünlerde kontrol edin."}
-        </p>
+  if (phase === "done") return <div className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900"><p className="flex items-center gap-2 font-bold"><Check className="h-4 w-4" />{added} ürün son onay için hazır</p><p className="mt-1 text-xs">Henüz kaydedilmedi. Sihirbazı bitirerek kaydedin; vazgeçerseniz bu ürünler eklenmez.</p><button type="button" className={`${smallBtnCls} mt-3`} onClick={() => { onImported([], [], null); setPhase("preview"); }}>Seçimi düzenle</button></div>;
+  if (phase === "reading") return <div className="rounded-2xl bg-violet-50 p-6 text-center" role="status"><LoaderCircle className="mx-auto h-6 w-6 animate-spin text-violet-600" /><p className="mt-2 text-sm font-semibold">Menünüz okunuyor… {elapsed} sn</p><p className="mt-1 text-xs text-slate-500">Genellikle 1–3 dakika sürer. İşlem tamamlanana kadar bekleyin.</p></div>;
+  if (phase === "preview" && menu) {
+    const count = menu.categories.reduce((n, c, ci) => n + c.items.filter((_i, ii) => actions[`${ci}:${ii}`] !== "skip").length, 0);
+    const missing = menu.categories.reduce((n, c, ci) => n + c.items.filter((i, ii) => actions[`${ci}:${ii}`] !== "skip" && i.price === null && !i.sizes.length).length, 0);
+    return <div className="space-y-3 rounded-2xl border p-4">
+      <div className="flex items-center justify-between gap-2"><p className="text-sm font-bold">{count} ürün seçili{missing ? ` · ${missing} fiyat eksik` : ""}</p><button type="button" className={smallBtnCls} onClick={() => { onImported([], [], null); setPhase("idle"); setMenu(null); }}>Baştan başla</button></div>
+      <p className="text-xs text-slate-500">Fiyatları düzeltin, eşleşen ürünleri güncelleyin veya atlayın.</p>
+      <div className="max-h-[50dvh] space-y-3 overflow-y-auto">
+        {menu.categories.map((c, ci) => <details key={ci} open className="rounded-xl bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-bold">{c.name} ({c.items.length})</summary>
+          <label className="mt-2 block text-xs text-slate-500">Kategoriye ekle<select className={`${inputCls} mt-1`} value={categoryTargets[ci] ?? ""} onChange={(e) => { setCategoryTargets((prev) => ({ ...prev, [ci]: e.target.value })); const target = e.target.value; setActions((prev) => ({ ...prev, ...Object.fromEntries(c.items.map((i, ii) => [`${ci}:${ii}`, target && existingItems.some((x) => x.categoryId === target && normalizeSearch(x.name.tr) === normalizeSearch(i.name)) ? "skip" : "add"])) })); }}><option value="">Yeni kategori: {c.name}</option>{existingCategories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name.tr}</option>)}</select></label>
+          <ul className="mt-3 space-y-3">{c.items.map((item, ii) => <li key={ii} className="space-y-2 border-t border-slate-200 pt-2">
+            <div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold">{item.name}</span><select aria-label={`${item.name} aktarım işlemi`} value={actions[`${ci}:${ii}`] ?? "add"} onChange={(e) => setActions((prev) => ({ ...prev, [`${ci}:${ii}`]: e.target.value as Action }))} className="rounded-lg border bg-white p-1 text-xs"><option value="add">Yeni ekle</option>{matches(ci, ii).length === 1 && <option value="update">Mevcut ürünü güncelle</option>}<option value="skip">Atla</option></select></div>
+            {actions[`${ci}:${ii}`] !== "skip" && <div className="flex flex-wrap gap-2">{item.sizes.length ? item.sizes.map((size, si) => <label key={si} className="text-xs text-slate-500">{size.name} (₺)<input type="number" min="0" step="0.01" aria-label={`${item.name} ${size.name} fiyatı`} className={`${inputCls} mt-1 w-28`} value={size.price ?? ""} onChange={(e) => updatePrice(ci, ii, e.target.value, si)} /></label>) : <label className="text-xs text-slate-500">Fiyat (₺)<input type="number" min="0" step="0.01" aria-label={`${item.name} fiyatı`} className={`${inputCls} mt-1 w-28`} value={item.price ?? ""} onChange={(e) => updatePrice(ci, ii, e.target.value)} /></label>}</div>}
+          </li>)}</ul>
+        </details>)}
       </div>
-    );
+      {missing > 0 && <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Fiyatı eksik {missing} ürün gizli hazırlanacak. Fiyatını kontrol etmeden menüde gösterilemez.</p>}
+      {menu.notes.length > 0 && <details className="text-xs text-slate-500"><summary className="cursor-pointer">Okuma notları ({menu.notes.length})</summary>{menu.notes.map((note, i) => <p className="mt-1" key={i}>{note}</p>)}</details>}
+      <p className="text-xs text-slate-500">Yeni ürünlerin içerikleri AI önerisidir; yayınlamadan önce kontrol edin. {existingItemCount > 0 && "Mevcut ürünler silinmez. Güncelleme seçeneği ad, açıklama ve fiyatları değiştirir."}</p>
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      <button type="button" className={`${primaryBtnCls} w-full`} disabled={!count} onClick={prepare}>{count} ürünü onay ekranına taşı</button>
+    </div>;
   }
-
-  if ((phase === "preview" || phase === "saving") && menu) {
-    const itemCount = menu.categories.reduce((n, c) => n + c.items.length, 0);
-    const noPrice = menu.categories.reduce((n, c) => n + c.items.filter((i) => i.price === null && !i.sizes.length).length, 0);
-    return (
-      <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
-              <Sparkles className="h-4 w-4 text-violet-600" /> {menu.categories.length} kategori ve {itemCount} ürün bulundu
-            </p>
-            <p className="text-xs text-slate-500">Göz atın; ekledikten sonra her ürünü düzenleyebilirsiniz.</p>
-          </div>
-          <button type="button" onClick={reset} className="text-xs font-semibold text-slate-500 hover:text-slate-800">
-            Baştan başla
-          </button>
-        </div>
-
-        <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-          {menu.categories.map((c, ci) => (
-            <details key={ci} className="group rounded-xl bg-slate-50 px-3 py-2">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-slate-800">
-                <span className="truncate">
-                  {c.name} <span className="font-normal text-slate-400">({c.items.length})</span>
-                </span>
-                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
-              </summary>
-              <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                {c.items.map((i, ii) => (
-                  <li key={ii} className="flex justify-between gap-3">
-                    <span className="truncate">{i.name}</span>
-                    <span className="shrink-0 font-medium text-slate-800">
-                      {i.sizes.length > 1 ? i.sizes.map((s) => formatPrice(s.price)).join(" / ") : formatPrice(i.price ?? i.sizes[0]?.price ?? null)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ))}
-        </div>
-
-        {(menu.notes.length > 0 || noPrice > 0) && (
-          <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
-            <p className="flex items-center gap-1.5 font-bold">
-              <TriangleAlert className="h-3.5 w-3.5" /> Kontrol etmeniz gerekenler
-            </p>
-            {noPrice > 0 && <p>• {noPrice} ürünün fiyatı okunamadı; ₺0 olarak eklenecek.</p>}
-            {menu.notes.map((n, i) => (
-              <p key={i}>• {n}</p>
-            ))}
-          </div>
-        )}
-
-        <p className="text-[11px] leading-snug text-slate-500">
-          İçindekiler ve alerjenler yapay zekâ önerisidir ve &quot;doğrulanmadı&quot; olarak işaretlenir; müşteriye kesin bilgi gibi gösterilmez. Her üründe
-          kontrol edip onaylayın.
-          {existingItemCount > 0 && ` Mevcut ${existingItemCount} ürününüz silinmez; yeniler yanına eklenir.`}
-        </p>
-
-        {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-        <button type="button" className={`${primaryBtnCls} w-full`} disabled={phase === "saving"} onClick={save}>
-          {phase === "saving" ? (
-            <>
-              <LoaderCircle className="h-4 w-4 animate-spin" /> Ekleniyor…
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4" /> {itemCount} ürünü menüme ekle
-            </>
-          )}
-        </button>
-      </div>
-    );
-  }
-
-  if (phase === "reading") {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50/60 px-4 py-8 text-center">
-        <LoaderCircle className="h-7 w-7 animate-spin text-violet-600" />
-        <div>
-          <p className="text-sm font-bold text-slate-900">Menünüz okunuyor… {elapsed > 0 && <span className="font-normal text-slate-500">{elapsed} sn</span>}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Kategoriler, ürünler, fiyatlar ve içerikler çıkarılıyor. Menünün uzunluğuna göre 1–3 dakika sürebilir; bu pencereyi kapatmayın.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3 rounded-2xl border border-violet-200 bg-violet-50/40 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
-            <Sparkles className="h-4 w-4 text-violet-600" /> Menünüzü yükleyin, ürünleri biz ekleyelim
-          </p>
-          <p className="text-xs text-slate-500">Basılı menünün fotoğrafı, PDF ya da web sitenizdeki menü linki.</p>
-        </div>
-      </div>
-
-      <div className="inline-flex rounded-full bg-white p-1 text-xs font-semibold shadow-sm">
-        {(
-          [
-            ["file", "Dosya / fotoğraf", Upload],
-            ["url", "Web linki", Link2],
-          ] as const
-        ).map(([m, label, Icon]) => (
-          <button
-            key={m}
-            type="button"
-            aria-pressed={mode === m}
-            onClick={() => {
-              setMode(m);
-              setError("");
-            }}
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 transition ${mode === m ? "bg-violet-600 text-white" : "text-slate-500"}`}
-          >
-            <Icon className="h-3.5 w-3.5" /> {label}
-          </button>
-        ))}
-      </div>
-
-      {mode === "file" ? (
-        <>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              addFiles(e.dataTransfer.files);
-            }}
-            className={`flex w-full flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-5 text-center transition ${
-              dragging ? "border-violet-500 bg-violet-100/60" : "border-slate-300 bg-white hover:border-violet-400"
-            }`}
-          >
-            <Upload className="h-5 w-5 text-violet-500" />
-            <span className="text-sm font-semibold text-slate-800">Dosya seçin veya buraya sürükleyin</span>
-            <span className="text-[11px] text-slate-500">PDF, JPG, PNG · en fazla {MAX_FILES} dosya · her sayfa için ayrı fotoğraf</span>
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPTED_FILES}
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              addFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          {files.length > 0 && (
-            <ul className="space-y-1">
-              {files.map((f, i) => (
-                <li key={i} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-700">
-                  {f.type === "application/pdf" ? <FileText className="h-3.5 w-3.5 text-slate-400" /> : <ImageIcon className="h-3.5 w-3.5 text-slate-400" />}
-                  <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                  <span className="text-slate-400">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
-                  <button type="button" aria-label="Kaldır" onClick={() => setFiles(files.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-600">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      ) : (
-        <div className="space-y-1">
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://kafeniz.com/menu" className={inputCls} />
-          <p className="text-[11px] text-slate-500">Sadece herkese açık menü sayfaları okunabilir. Açılmazsa menünün PDF&apos;ini veya fotoğrafını yükleyin.</p>
-        </div>
-      )}
-
-      {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-      <button type="button" className={`${primaryBtnCls} w-full !bg-violet-600 hover:!bg-violet-700`} disabled={!canRead} onClick={read}>
-        <Sparkles className="h-4 w-4" /> Menüyü oku
-      </button>
-      <p className="text-center text-[11px] text-slate-400">Günde 5 okuma hakkınız var. Okunan menü siz onaylamadan eklenmez.</p>
-    </div>
-  );
+  return <div className="space-y-3 rounded-2xl border border-violet-200 bg-violet-50/40 p-4">
+    <p className="text-sm font-bold">Menünüzü yükleyin</p>
+    <div className="flex gap-2">{(["file", "url"] as const).map((value) => <button key={value} type="button" aria-pressed={mode === value} onClick={() => setMode(value)} className={`${smallBtnCls} ${mode === value ? "!border-violet-400 !text-violet-700" : ""}`}>{value === "file" ? "Dosya / fotoğraf" : "Web linki"}</button>)}</div>
+    {mode === "file" ? <><label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed bg-white p-5 text-center"><Upload className="h-5 w-5 text-violet-600" /><span className="text-sm font-semibold">Dosya seçin</span><span className="text-xs text-slate-500">PDF, JPG, PNG, WEBP · En fazla {MAX_FILES} dosya · PDF başına 12 MB</span><input type="file" accept={ACCEPTED_FILES} multiple className="sr-only" onChange={(e) => { const picked = Array.from(e.target.files ?? []); const accepted = picked.filter((f) => ACCEPTED_FILES.split(",").includes(f.type)); if (picked.length !== accepted.length) setError("Sadece PDF, JPG, PNG veya WEBP seçin."); else if (files.length + accepted.length > MAX_FILES) setError(`En fazla ${MAX_FILES} dosya seçebilirsiniz.`); else setError(""); setFiles((prev) => [...prev, ...accepted].slice(0, MAX_FILES)); e.target.value = ""; }} /></label>{files.map((file, i) => <div className="flex items-center justify-between gap-2 text-xs" key={`${file.name}-${i}`}><span className="truncate">{file.name} · {(file.size / 1048576).toFixed(1)} MB</span><button type="button" className={smallBtnCls} onClick={() => setFiles((prev) => prev.filter((_f, index) => index !== i))}>Kaldır</button></div>)}</> : <><input aria-label="Menü web adresi" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://kafeniz.com/menu" className={inputCls} /><p className="text-xs text-slate-500">Herkese açık menü sayfası.</p></>}
+    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    <button type="button" className={`${primaryBtnCls} w-full`} disabled={mode === "file" ? !files.length : !/^https?:\/\/\S+\.\S+/.test(url.trim())} onClick={read}>Menüyü oku</button>
+    <p className="text-xs text-slate-500">Günde 5 okuma. Son onayınıza kadar ürünler kaydedilmez.</p>
+  </div>;
 }
-
