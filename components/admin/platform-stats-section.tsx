@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { Search } from "lucide-react";
 import { db } from "@/lib/firebase";
+import ManualBadge from "@/components/points/manual-badge";
 
 // ─────────────────────────────────────────────
 // Types
@@ -44,6 +45,8 @@ type TxRow = {
   type: string;
   status: string;
   createdAt: Timestamp | null;
+  manual: boolean;
+  manualByRole?: string;
 };
 
 type DateFilter = "daily" | "weekly" | "monthly";
@@ -291,6 +294,8 @@ export default function PlatformStatsSection({ cafes }: { cafes: CafeOption[] })
               type: ((data.processedType || data.type || "") as string),
               status: ((data.status || "") as string),
               createdAt: (data.createdAt as Timestamp) ?? null,
+              manual: data.manual === true,
+              manualByRole: data.manualByRole as string | undefined,
             };
           })
           .filter((tx) => tx.status !== "pending");
@@ -662,6 +667,7 @@ export default function PlatformStatsSection({ cafes }: { cafes: CafeOption[] })
                       </p>
                       <p className={`text-sm font-semibold ${typeStyle(tx.type)}`}>
                         {typeLabel(tx.type)}
+                        {tx.manual && <ManualBadge role={tx.manualByRole} />}
                       </p>
                     </div>
                   </div>

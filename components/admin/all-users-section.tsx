@@ -9,8 +9,10 @@ import {
   getDocs,
   Timestamp,
 } from "firebase/firestore";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
+import { findCustomerByPhone, looksLikePhone } from "@/lib/points";
+import AdjustPointsForm from "@/components/points/adjust-points-form";
 
 // ─────────────────────────────────────────────
 // Types
@@ -91,6 +93,41 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("lastVisit");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+
+  // Telefonla kayıtlı müşteri: numara Firestore'da yok → sunucudan bulunur, aramaya UID yazılır
+  const lookupPhone = async () => {
+    setPhoneBusy(true);
+    setPhoneError("");
+    try {
+      const r = await findCustomerByPhone(search);
+      setSearch(r.uid);
+      setExpanded((prev) => new Set(prev).add(r.uid));
+    } catch (e) {
+      setPhoneError((e as Error).message);
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  // Manuel düzeltme sonrası satırı yerinde güncelle (listeyi baştan yüklemeden)
+  const applyCardUpdate = (uid: string, cafeId: string, stamps: number, rewards: number) => {
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.uid !== uid) return u;
+        const cards = u.cards.map((c) => (c.cafeId === cafeId ? { ...c, stamps, pendingRewards: rewards, lastVisit: new Date() } : c));
+        return {
+          ...u,
+          cards,
+          totalStamps: cards.reduce((s, c) => s + c.stamps, 0),
+          pendingRewards: cards.reduce((s, c) => s + c.pendingRewards, 0),
+          lastVisit: new Date(),
+        };
+      })
+    );
+  };
 
   useEffect(() => {
     let active = true;
@@ -267,8 +304,14 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="İsim, email veya UID ile ara"
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPhoneError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && looksLikePhone(search) && !phoneBusy) lookupPhone();
+              }}
+              placeholder="İsim, email, telefon veya UID ile ara"
               className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
             />
           </div>
@@ -310,7 +353,21 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
                 <div>Son Geliş</div>
               </div>
 
-              {visibleUsers.length === 0 ? (
+              {looksLikePhone(search) ? (
+                <div className="flex flex-col items-center gap-3 border-t border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                  <p>Telefonla kayıt olan kullanıcılar numarasıyla bulunur.</p>
+                  <button
+                    type="button"
+                    onClick={lookupPhone}
+                    disabled={phoneBusy}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    <Smartphone className="h-4 w-4" />
+                    {phoneBusy ? "Aranıyor..." : "Bu numarayla kullanıcı bul"}
+                  </button>
+                  {phoneError && <p className="text-xs font-medium text-red-600">{phoneError}</p>}
+                </div>
+              ) : visibleUsers.length === 0 ? (
                 <div className="border-t border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
                   {users.length === 0 ? "Henüz kullanıcı yok." : "Arama sonucu bulunamadı."}
                 </div>
@@ -373,21 +430,45 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
                             <p className="py-2 text-xs text-slate-500">Bu kullanıcının henüz kartı yok.</p>
                           ) : (
                             <div className="space-y-2">
-                              {u.cards.map((c) => (
-                                <div
-                                  key={c.cafeId}
-                                  className="grid grid-cols-[2fr_1fr_1fr_1fr_1.4fr] items-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs"
-                                >
-                                  <p className="truncate font-semibold text-slate-800">{cafeNameOf(c)}</p>
-                                  <p className="text-emerald-700">
-                                    ☕ {c.stamps}
-                                    {c.goal > 0 && <span className="text-slate-400"> / {c.goal}</span>}
-                                  </p>
-                                  <p className="text-amber-700">🎁 {c.pendingRewards} hak</p>
-                                  <p className="text-violet-700">✅ {c.redeemCount} kullanım</p>
-                                  <p className="text-slate-500">{formatDate(c.lastVisit)}</p>
-                                </div>
-                              ))}
+                              {u.cards.map((c) => {
+                                const key = `${u.uid}__${c.cafeId}`;
+                                return (
+                                  <div key={c.cafeId} className="space-y-2">
+                                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1.4fr_auto] items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs">
+                                      <p className="truncate font-semibold text-slate-800">{cafeNameOf(c)}</p>
+                                      <p className="text-emerald-700">
+                                        ☕ {c.stamps}
+                                        {c.goal > 0 && <span className="text-slate-400"> / {c.goal}</span>}
+                                      </p>
+                                      <p className="text-amber-700">🎁 {c.pendingRewards} hak</p>
+                                      <p className="text-violet-700">✅ {c.redeemCount} kullanım</p>
+                                      <p className="text-slate-500">{formatDate(c.lastVisit)}</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingKey(editingKey === key ? null : key)}
+                                        className="rounded-xl border border-slate-200 px-2.5 py-1 font-semibold text-slate-600 transition hover:bg-slate-100"
+                                      >
+                                        Düzelt
+                                      </button>
+                                    </div>
+                                    {editingKey === key && (
+                                      <AdjustPointsForm
+                                        mode="admin"
+                                        userUid={u.uid}
+                                        cafeId={c.cafeId}
+                                        stamps={c.stamps}
+                                        rewards={c.pendingRewards}
+                                        goal={c.goal > 0 ? c.goal : undefined}
+                                        onCancel={() => setEditingKey(null)}
+                                        onDone={(r) => {
+                                          applyCardUpdate(u.uid, c.cafeId, r.stampsAfter, r.rewardsAfter);
+                                          setEditingKey(null);
+                                        }}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

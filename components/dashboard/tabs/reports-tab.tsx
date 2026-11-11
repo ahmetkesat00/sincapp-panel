@@ -11,6 +11,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import ManualBadge from "@/components/points/manual-badge";
 
 import SectionTitle from "../ui/section-title";
 import MiniBarChart from "../ui/mini-bar-chart";
@@ -36,6 +37,8 @@ type TxRow = {
   stampCount: number;
   createdAt: Timestamp | null;
   scannedAt: Timestamp | null;
+  manual: boolean;
+  manualByRole?: string;
 };
 
 type DateFilter = "daily" | "weekly" | "monthly";
@@ -207,6 +210,8 @@ export default function ReportsTab({ cafeId }: { cafeId: string }) {
               stampCount: Number(data.stampCount ?? 1),
               createdAt: (data.createdAt as Timestamp) ?? null,
               scannedAt: (data.scannedAt as Timestamp) ?? null,
+              manual: data.manual === true,
+              manualByRole: data.manualByRole as string | undefined,
             };
           })
           .filter((tx) => tx.status !== "pending");
@@ -386,6 +391,7 @@ export default function ReportsTab({ cafeId }: { cafeId: string }) {
                       </p>
                       <p className={`text-sm font-semibold ${typeStyle(tx.type)}`}>
                         {tx.type === "stamp" ? `Damga${tx.stampCount > 1 ? ` (x${tx.stampCount})` : ""}` : typeLabel(tx.type)}
+                        {tx.manual && <ManualBadge role={tx.manualByRole} />}
                       </p>
                     </div>
                   </div>

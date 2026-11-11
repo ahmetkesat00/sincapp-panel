@@ -1,4 +1,4 @@
-// LoopyGo QR menü fonksiyonları ("menu" codebase). Uygulamanın fonksiyonlarından ayrı deploy edilir:
+// LoopyGo panel fonksiyonları ("menu" codebase: QR menü + panelden manuel damga). Uygulamanın fonksiyonlarından ayrı deploy edilir:
 //   cd firebase && firebase deploy --only functions:menu
 // Diğer fonksiyonlar (damga, Apple Wallet vb.) cafe_loyalty_app/functions'ta; bu deploy onlara dokunmaz.
 
@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const { extractMenu, fetchMenuUrl, ExtractError, MODEL } = require("./extract");
 const { handleMenuEvents, aggregateStats } = require("./stats");
 const { suggestRecipes } = require("./recipes");
+const { adjustPoints, findCustomerByPhone } = require("./points");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -222,3 +223,9 @@ exports.getMenuStats = onCall({ region: REGION, memory: "256MiB", timeoutSeconds
   const days = Number(request.data?.days) === 30 ? 30 : 7;
   return aggregateStats(db, cafeId, days);
 });
+
+/** Panelden manuel damga: admin ±yıldız/±ödül düzeltir, işletme sahibi kendi müşterisine damga verir. */
+exports.adjustPoints = onCall({ region: REGION, memory: "256MiB", timeoutSeconds: 20 }, (request) => adjustPoints(db, request));
+
+/** Telefonla kayıtlı müşteriyi numarasıyla bulur (manuel damga için). */
+exports.findCustomerByPhone = onCall({ region: REGION, memory: "256MiB", timeoutSeconds: 20 }, (request) => findCustomerByPhone(db, request));

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { collectionGroup, collection, query, where, getDocs } from "firebase/firestore";
-import { Search } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { collectionGroup, collection, query, where, getDocs, getDoc, doc } from "firebase/firestore";
+import { Search, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
+import AdjustPointsForm from "@/components/points/adjust-points-form";
+import { findCustomerByPhone, looksLikePhone } from "@/lib/points";
 import SectionTitle from "../ui/section-title";
 import { shellCardClass } from "../helpers";
 
@@ -17,6 +19,7 @@ type CustomerRow = {
   email: string;
   stamps: number;
   rewards: number;
+  phoneMasked?: string;
 };
 
 // ─────────────────────────────────────────────
@@ -28,6 +31,52 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [search, setSearch] = useState("");
   const [errorText, setErrorText] = useState("");
+  const [selectedUid, setSelectedUid] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ uid: string; text: string } | null>(null);
+  const [goal, setGoal] = useState<number | undefined>(undefined);
+  // Telefonla kayıtlı müşteriler: numara Firestore'da yok, sunucudan numarayla bulunur
+  const [phoneMatch, setPhoneMatch] = useState<{ query: string; uid: string } | null>(null);
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+  const phoneSearch = looksLikePhone(search);
+
+  const lookupPhone = async () => {
+    setPhoneBusy(true);
+    setPhoneError("");
+    try {
+      const r = await findCustomerByPhone(search, cafeId);
+      setCustomers((prev) =>
+        prev.some((x) => x.uid === r.uid)
+          ? prev.map((x) => (x.uid === r.uid ? { ...x, phoneMasked: r.phoneMasked } : x))
+          : [...prev, { uid: r.uid, displayName: r.displayName, email: r.email, stamps: r.stamps, rewards: r.rewards, phoneMasked: r.phoneMasked }]
+      );
+      setPhoneMatch({ query: search, uid: r.uid });
+      setSelectedUid(r.uid);
+    } catch (e) {
+      setPhoneError((e as Error).message);
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  // Kart hedefi (damga formundaki önizleme için)
+  useEffect(() => {
+    if (!cafeId) return;
+    (async () => {
+      try {
+        const cafe = (await getDoc(doc(db, "cafes", cafeId))).data();
+        if (!cafe) return;
+        if (cafe.chainId) {
+          const chain = (await getDoc(doc(db, "chains", String(cafe.chainId)))).data();
+          setGoal(Number(chain?.loyaltyCard?.rewardBuy ?? 5));
+        } else {
+          setGoal(Number(cafe.loyaltyCards?.[0]?.rewardBuy ?? cafe.rewardBuy ?? 5));
+        }
+      } catch {
+        // önizleme dönüşümsüz gösterilir
+      }
+    })();
+  }, [cafeId]);
 
   useEffect(() => {
     if (!cafeId) return;
@@ -65,7 +114,11 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
                 );
                 if (!userSnap.empty) {
                   const userData = userSnap.docs[0].data();
-                  displayName = userData.fullName || userData.displayName || displayName;
+                  displayName =
+                    userData.fullName ||
+                    userData.displayName ||
+                    [userData.name, userData.surname].filter(Boolean).join(" ") ||
+                    displayName;
                   email = userData.email || "";
                 }
               } catch {
@@ -98,13 +151,16 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
     return () => { active = false; };
   }, [cafeId]);
 
-  const filtered = customers.filter((c) => {
-    const q = search.toLowerCase();
-    return (
-      c.displayName.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q)
-    );
-  });
+  const matchedByPhone = phoneMatch && phoneMatch.query === search ? phoneMatch.uid : null;
+  const filtered = matchedByPhone
+    ? customers.filter((c) => c.uid === matchedByPhone)
+    : customers.filter((c) => {
+        const q = search.toLowerCase();
+        return (
+          c.displayName.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q)
+        );
+      });
 
   // ── Loading ──
   if (loading) {
@@ -140,9 +196,15 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPhoneError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && phoneSearch && !matchedByPhone && !phoneBusy) lookupPhone();
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                placeholder="İsim veya email ile ara"
+                placeholder="İsim, email veya telefon ile ara"
               />
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
@@ -163,7 +225,21 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
               </div>
 
               {/* Rows */}
-              {filtered.length === 0 ? (
+              {phoneSearch && !matchedByPhone ? (
+                <div className="flex flex-col items-center gap-3 border-t border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                  <p>Telefonla kayıt olan müşteriler numarasıyla bulunur.</p>
+                  <button
+                    type="button"
+                    onClick={lookupPhone}
+                    disabled={phoneBusy}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <Smartphone className="h-4 w-4" />
+                    {phoneBusy ? "Aranıyor..." : "Bu numarayla müşteri bul"}
+                  </button>
+                  {phoneError && <p className="text-xs font-medium text-red-600">{phoneError}</p>}
+                </div>
+              ) : filtered.length === 0 ? (
                 <div className="border-t border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
                   {customers.length === 0
                     ? "Bu mağazada henüz kart oluşturulmamış."
@@ -171,13 +247,18 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
                 </div>
               ) : (
                 filtered.map((c) => (
+                  <Fragment key={c.uid}>
                   <div
-                    key={c.uid}
-                    className="grid grid-cols-[2fr_1fr_1fr_1fr] items-center border-t border-slate-200 bg-white px-4 py-4 text-sm transition hover:bg-slate-50"
+                    onClick={() => setSelectedUid(selectedUid === c.uid ? null : c.uid)}
+                    className={`grid cursor-pointer grid-cols-[2fr_1fr_1fr_1fr] items-center border-t border-slate-200 px-4 py-4 text-sm transition hover:bg-slate-50 ${
+                      selectedUid === c.uid ? "bg-slate-50" : "bg-white"
+                    }`}
                   >
                     <div>
                       <p className="font-semibold text-slate-900">{c.displayName}</p>
                       {c.email && <p className="text-xs text-slate-400">{c.email}</p>}
+                      {c.phoneMasked && <p className="text-xs text-slate-400">📱 {c.phoneMasked}</p>}
+                      {flash?.uid === c.uid && <p className="mt-1 text-xs font-semibold text-emerald-700">{flash.text}</p>}
                     </div>
 
                     <div>
@@ -206,6 +287,30 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
                       </span>
                     </div>
                   </div>
+                  {selectedUid === c.uid && c.uid && (
+                    <div className="border-t border-slate-100 bg-slate-50 px-4 pb-4 pt-1">
+                      <AdjustPointsForm
+                        mode="owner"
+                        userUid={c.uid}
+                        cafeId={cafeId}
+                        stamps={c.stamps}
+                        rewards={c.rewards}
+                        goal={goal}
+                        onCancel={() => setSelectedUid(null)}
+                        onDone={(r) => {
+                          setCustomers((prev) =>
+                            prev.map((x) => (x.uid === c.uid ? { ...x, stamps: r.stampsAfter, rewards: r.rewardsAfter } : x))
+                          );
+                          setFlash({
+                            uid: c.uid,
+                            text: r.earned > 0 ? `Damga verildi, müşteri ${r.earned} ödül kazandı.` : "Damga verildi.",
+                          });
+                          setSelectedUid(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                  </Fragment>
                 ))
               )}
             </div>
