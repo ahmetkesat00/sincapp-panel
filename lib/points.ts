@@ -54,5 +54,14 @@ export async function findCustomerByPhone(phone: string, cafeId?: string): Promi
   }
 }
 
+/** Tam bir TR cep numarası mı? (0532 123 45 67, 5321234567, +90 532...) — sunucudaki normalizeTrPhone ile aynı kural. */
+export function isCompleteTrMobile(q: string): boolean {
+  if (!/^[\d\s()+-]+$/.test(q.trim())) return false;
+  let d = q.replace(/\D/g, "");
+  if (d.startsWith("90") && d.length === 12) d = d.slice(2);
+  if (d.startsWith("0") && d.length === 11) d = d.slice(1);
+  return /^5\d{9}$/.test(d);
+}
+
 /** Arama metni telefon numarasına benziyor mu (en az 10 rakam, harf yok)? */
 export const looksLikePhone = (q: string) => /^[\d\s()+-]+$/.test(q.trim()) && q.replace(/\D/g, "").length >= 10;

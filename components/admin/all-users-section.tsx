@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   collectionGroup,
   collection,
@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { ChevronDown, ChevronRight, Search, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { findCustomerByPhone, looksLikePhone } from "@/lib/points";
+import { findCustomerByPhone, isCompleteTrMobile, looksLikePhone } from "@/lib/points";
 import AdjustPointsForm from "@/components/points/adjust-points-form";
 
 // ─────────────────────────────────────────────
@@ -98,7 +98,9 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
   const [phoneError, setPhoneError] = useState("");
 
   // Telefonla kayıtlı müşteri: numara Firestore'da yok → sunucudan bulunur, aramaya UID yazılır
+  const lastPhoneQuery = useRef("");
   const lookupPhone = async () => {
+    lastPhoneQuery.current = search;
     setPhoneBusy(true);
     setPhoneError("");
     try {
@@ -111,6 +113,14 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
       setPhoneBusy(false);
     }
   };
+
+  // Tam bir cep numarası yazılınca kendiliğinden ara
+  useEffect(() => {
+    if (!isCompleteTrMobile(search) || search === lastPhoneQuery.current) return;
+    const t = setTimeout(lookupPhone, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   // Manuel düzeltme sonrası satırı yerinde güncelle (listeyi baştan yüklemeden)
   const applyCardUpdate = (uid: string, cafeId: string, stamps: number, rewards: number) => {

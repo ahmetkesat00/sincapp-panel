@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { collectionGroup, collection, query, where, getDocs, getDoc, doc } from "firebase/firestore";
 import { Search, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
 import AdjustPointsForm from "@/components/points/adjust-points-form";
-import { findCustomerByPhone, looksLikePhone } from "@/lib/points";
+import { findCustomerByPhone, isCompleteTrMobile, looksLikePhone } from "@/lib/points";
 import SectionTitle from "../ui/section-title";
 import { shellCardClass } from "../helpers";
 
@@ -40,23 +40,39 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
   const [phoneError, setPhoneError] = useState("");
   const phoneSearch = looksLikePhone(search);
 
-  const lookupPhone = async () => {
+  const lastPhoneQuery = useRef("");
+
+  const lookupPhone = async (q: string = search) => {
+    lastPhoneQuery.current = q;
     setPhoneBusy(true);
     setPhoneError("");
     try {
-      const r = await findCustomerByPhone(search, cafeId);
+      const r = await findCustomerByPhone(q, cafeId);
       setCustomers((prev) =>
         prev.some((x) => x.uid === r.uid)
           ? prev.map((x) => (x.uid === r.uid ? { ...x, phoneMasked: r.phoneMasked } : x))
           : [...prev, { uid: r.uid, displayName: r.displayName, email: r.email, stamps: r.stamps, rewards: r.rewards, phoneMasked: r.phoneMasked }]
       );
-      setPhoneMatch({ query: search, uid: r.uid });
+      setPhoneMatch({ query: q, uid: r.uid });
       setSelectedUid(r.uid);
     } catch (e) {
       setPhoneError((e as Error).message);
     } finally {
       setPhoneBusy(false);
     }
+  };
+
+  // Tam bir cep numarası yazılınca kısa bir beklemeden sonra kendiliğinden ara (aynı numarayı tekrar sormadan)
+  useEffect(() => {
+    if (!isCompleteTrMobile(search) || search === lastPhoneQuery.current) return;
+    const t = setTimeout(() => lookupPhone(search), 500);
+    return () => clearTimeout(t);
+    // lookupPhone her render'da yeniden oluşur; sadece arama metni değişince tetiklenmeli
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  const runSearch = () => {
+    if (phoneSearch && !phoneBusy) lookupPhone(search);
   };
 
   // Kart hedefi (damga formundaki önizleme için)
@@ -192,21 +208,41 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
         <div className="p-6">
           {/* Arama + sayaç */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPhoneError("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && phoneSearch && !matchedByPhone && !phoneBusy) lookupPhone();
-                }}
-                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                placeholder="İsim, email veya telefon ile ara"
-              />
-            </div>
+            <form
+              className="flex w-full max-w-md items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                runSearch();
+              }}
+            >
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  inputMode="search"
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPhoneError("");
+                  }}
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  placeholder="İsim, email veya telefon (0532...)"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!search.trim() || phoneBusy}
+                title="Ara"
+                aria-label="Ara"
+                className="flex h-[46px] shrink-0 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {phoneBusy ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Ara</span>
+              </button>
+            </form>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
               {filtered.length} kayıtlı kullanıcı
             </div>
@@ -227,10 +263,10 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
               {/* Rows */}
               {phoneSearch && !matchedByPhone ? (
                 <div className="flex flex-col items-center gap-3 border-t border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                  <p>Telefonla kayıt olan müşteriler numarasıyla bulunur.</p>
+                  <p>{phoneBusy ? "Numara aranıyor..." : "Telefonla kayıt olan müşteriler numarasıyla bulunur."}</p>
                   <button
                     type="button"
-                    onClick={lookupPhone}
+                    onClick={() => lookupPhone(search)}
                     disabled={phoneBusy}
                     className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                   >
