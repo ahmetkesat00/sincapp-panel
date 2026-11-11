@@ -18,6 +18,15 @@ function fakeDb(seed) {
   return {
     store,
     collection: col,
+    collectionGroup: (name) => ({
+      where: (field, op, value) => ({
+        get: async () => ({
+          docs: [...store]
+            .filter(([k, v]) => k.split("/").at(-2) === name && v?.[field] === value)
+            .map(([k, v]) => ({ data: () => v, ref: { parent: { parent: { id: k.split("/").at(-3) } } } })),
+        }),
+      }),
+    }),
     runTransaction: async (fn) => {
       const writes = [];
       const t = {
@@ -127,4 +136,40 @@ const rejects = async (p, code) => assert.equal((await p.then(() => null, (e) =>
   await rejects(find("own", { cafeId: "c1", phone: "212 123 4567" }), "invalid-argument");
   assert.equal((await find("adm", { phone: "+90 532 123 45 67" })).uid, "cust");
 }
-console.log("adjustPoints + findCustomerByPhone: tüm testler geçti");
+// searchCustomersByPhone: tam + kısmi numara
+{
+  const { searchCustomersByPhone } = require("../points.js");
+  const adminSdk = require("firebase-admin");
+  const authUsers = [
+    { uid: "cust", phoneNumber: "+905321234567" },
+    { uid: "cust2", phoneNumber: "+905551234500" }, // c1'de kartı yok
+    { uid: "own", phoneNumber: "+905321230000" },
+  ];
+  Object.defineProperty(adminSdk, "auth", { configurable: true, value: () => ({
+    getUserByPhoneNumber: async (p) => {
+      const u = authUsers.find((x) => x.phoneNumber === p);
+      if (!u) throw Object.assign(new Error("nf"), { code: "auth/user-not-found" });
+      return u;
+    },
+    getUsers: async (ids) => ({ users: authUsers.filter((u) => ids.some((i) => i.uid === u.uid)) }),
+    listUsers: async () => ({ users: authUsers }),
+  }) });
+  const s = seed();
+  s["users/cust2"] = { role: "user", name: "Ayşe", surname: "K" };
+  s["users/own/points/c1"] = { cafeId: "c1", userUid: "own", stamps: 1, rewards: 0 };
+  const db = fakeDb(s);
+  const search = async (uid, data) => (await searchCustomersByPhone(db, { auth: { uid }, data })).matches.map((m) => m.uid);
+
+  assert.deepEqual(await search("own", { cafeId: "c1", phone: "0532 123 45 67" }), ["cust"]); // tam
+  assert.deepEqual(await search("own", { cafeId: "c1", phone: "555 123 45 00" }), ["cust2"]); // tam, kartsız da bulunur
+  assert.deepEqual(await search("own", { cafeId: "c1", phone: "123 45" }), ["cust"]); // kısmi: sadece kart sahipleri, owner hesabı hariç
+  assert.deepEqual(await search("own", { cafeId: "c1", phone: "4567" }), ["cust"]); // son 4 hane
+  assert.deepEqual(await search("own", { cafeId: "c1", phone: "0532123" }), ["cust"]); // baştaki 0 yok sayılır
+  assert.deepEqual(await search("own", { cafeId: "c1", phone: "1234500" }), []); // cust2'nin c1'de kartı yok
+  assert.deepEqual((await search("adm", { phone: "12345" })).sort(), ["cust", "cust2"]); // admin: herkes
+  await rejects(searchCustomersByPhone(db, { auth: { uid: "own" }, data: { cafeId: "c1", phone: "12" } }), "invalid-argument");
+  await rejects(searchCustomersByPhone(db, { auth: { uid: "own2" }, data: { cafeId: "c1", phone: "1234" } }), "permission-denied");
+  const m = (await searchCustomersByPhone(db, { auth: { uid: "own" }, data: { cafeId: "c1", phone: "4567" } })).matches[0];
+  assert.equal(m.phoneMasked, "+90532 *** ** 67");
+}
+console.log("adjustPoints + findCustomerByPhone + searchCustomersByPhone: tüm testler geçti");

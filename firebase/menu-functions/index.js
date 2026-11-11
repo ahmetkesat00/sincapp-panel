@@ -8,7 +8,7 @@ const admin = require("firebase-admin");
 const { extractMenu, fetchMenuUrl, ExtractError, MODEL } = require("./extract");
 const { handleMenuEvents, aggregateStats } = require("./stats");
 const { suggestRecipes } = require("./recipes");
-const { adjustPoints, findCustomerByPhone } = require("./points");
+const { adjustPoints, findCustomerByPhone, searchCustomersByPhone } = require("./points");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -229,3 +229,6 @@ exports.adjustPoints = onCall({ region: REGION, memory: "256MiB", timeoutSeconds
 
 /** Telefonla kayıtlı müşteriyi numarasıyla bulur (manuel damga için). */
 exports.findCustomerByPhone = onCall({ region: REGION, memory: "256MiB", timeoutSeconds: 20 }, (request) => findCustomerByPhone(db, request));
+
+/** Numaranın tamamı veya bir kısmıyla müşteri arar (kısmi: sadece işletmenin kart sahipleri). */
+exports.searchCustomersByPhone = onCall({ region: REGION, memory: "256MiB", timeoutSeconds: 30 }, (request) => searchCustomersByPhone(db, request));

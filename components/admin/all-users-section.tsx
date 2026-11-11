@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { ChevronDown, ChevronRight, Search, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { findCustomerByPhone, isCompleteTrMobile, looksLikePhone } from "@/lib/points";
+import { isCompleteTrMobile, isPhoneQuery, searchCustomersByPhone } from "@/lib/points";
 import AdjustPointsForm from "@/components/points/adjust-points-form";
 
 // ─────────────────────────────────────────────
@@ -97,22 +97,30 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState("");
 
-  // Telefonla kayıtlı müşteri: numara Firestore'da yok → sunucudan bulunur, aramaya UID yazılır
+  // Telefon numarası Firestore'da yok → sunucudan (tam veya kısmi numarayla) bulunur
+  const [phoneMatch, setPhoneMatch] = useState<{ query: string; uids: string[] } | null>(null);
+  const phoneSearch = isPhoneQuery(search);
   const lastPhoneQuery = useRef("");
   const lookupPhone = async () => {
-    lastPhoneQuery.current = search;
+    const q = search;
+    lastPhoneQuery.current = q;
     setPhoneBusy(true);
     setPhoneError("");
     try {
-      const r = await findCustomerByPhone(search);
-      setSearch(r.uid);
-      setExpanded((prev) => new Set(prev).add(r.uid));
+      const found = await searchCustomersByPhone(q);
+      if (found.length === 0) {
+        setPhoneError("Bu numarayla eşleşen kullanıcı bulunamadı.");
+        return;
+      }
+      setPhoneMatch({ query: q, uids: found.map((r) => r.uid) });
+      if (found.length === 1) setExpanded((prev) => new Set(prev).add(found[0].uid));
     } catch (e) {
       setPhoneError((e as Error).message);
     } finally {
       setPhoneBusy(false);
     }
   };
+  const phoneUids = phoneMatch && phoneMatch.query === search ? phoneMatch.uids : null;
 
   // Tam bir cep numarası yazılınca kendiliğinden ara
   useEffect(() => {
@@ -254,7 +262,9 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
 
   const visibleUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = q
+    const filtered = phoneUids
+      ? users.filter((u) => phoneUids.includes(u.uid))
+      : q
       ? users.filter(
           (u) =>
             u.displayName.toLowerCase().includes(q) ||
@@ -269,7 +279,7 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
       return u.cards.length;
     };
     return [...filtered].sort((a, b) => sortValue(b) - sortValue(a));
-  }, [users, search, sortKey]);
+  }, [users, search, sortKey, phoneUids]);
 
   const cafeNameOf = (c: UserCard) =>
     cafes.find((x) => x.id === c.cafeId)?.name || c.cafeName || c.cafeId.slice(0, 10);
@@ -310,21 +320,39 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
 
         {/* Search + sort + count */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPhoneError("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && looksLikePhone(search) && !phoneBusy) lookupPhone();
-              }}
-              placeholder="İsim, email, telefon veya UID ile ara"
-              className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
-            />
-          </div>
+          <form
+            className="flex w-full max-w-md items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (phoneSearch && !phoneBusy) lookupPhone();
+            }}
+          >
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPhoneError("");
+                }}
+                placeholder="İsim, email, telefon veya UID ile ara"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!search.trim() || phoneBusy}
+              aria-label="Ara"
+              className="flex h-[46px] shrink-0 items-center gap-2 rounded-2xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {phoneBusy ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Ara</span>
+            </button>
+          </form>
           <div className="flex shrink-0 items-center gap-3">
             <select
               value={sortKey}
@@ -363,9 +391,9 @@ export default function AllUsersSection({ cafes }: { cafes: CafeOption[] }) {
                 <div>Son Geliş</div>
               </div>
 
-              {looksLikePhone(search) ? (
+              {phoneSearch && !phoneUids ? (
                 <div className="flex flex-col items-center gap-3 border-t border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                  <p>Telefonla kayıt olan kullanıcılar numarasıyla bulunur.</p>
+                  <p>{phoneBusy ? "Numara aranıyor..." : "Numaranın tamamını veya bir kısmını yazıp Ara’ya basın."}</p>
                   <button
                     type="button"
                     onClick={lookupPhone}

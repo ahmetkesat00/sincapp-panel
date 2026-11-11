@@ -270,4 +270,116 @@ async function findCustomerByPhone(db, request) {
   };
 }
 
-module.exports = { adjustPoints, findCustomerByPhone, normalizeTrPhone };
+const MIN_PARTIAL_DIGITS = 3;
+const MAX_MATCHES = 20;
+
+/** Sorgudaki rakamlar: baştaki +90 / 0 atılır ki "0532..." ile "+90532..." aynı eşleşsin. */
+function queryDigits(raw) {
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.startsWith("90") && d.length > 10) d = d.slice(2);
+  if (d.startsWith("0")) d = d.slice(1);
+  return d;
+}
+
+const nameOf = (profile, authUser) =>
+  profile.fullName ||
+  profile.displayName ||
+  [profile.name, profile.surname].filter(Boolean).join(" ") ||
+  authUser?.displayName ||
+  "İsimsiz müşteri";
+
+/**
+ * Numaranın tamamı veya bir kısmıyla müşteri arar.
+ * { phone, cafeId? } → { matches: [{ uid, displayName, email, phoneMasked, stamps, rewards, hasCard }] }
+ * - Tam numara: Firebase Auth'ta birebir arama (bu işletmede kartı olmayan müşteri de bulunur → ilk damga).
+ * - Kısmi (≥3 rakam): owner için SADECE bu işletmede/zincirde kartı olan müşterilerin numaralarında aranır;
+ *   admin cafeId vermezse tüm kullanıcılarda aranır. Numaralar her zaman maskeli döner.
+ */
+async function searchCustomersByPhone(db, request) {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Giriş yapmalısınız.");
+  const cafeId = String(request.data?.cafeId || "").trim();
+  const raw = request.data?.phone;
+
+  let pointsDocId = null;
+  let chainId = null;
+  const caller = (await db.collection("users").doc(uid).get()).data();
+  if (cafeId) {
+    const resolved = await resolveCafe(db, cafeId);
+    await callerRole(db, uid, resolved.cafe, cafeId);
+    pointsDocId = resolved.pointsDocId;
+    chainId = resolved.chainId;
+  } else if (caller?.role !== "admin") {
+    throw new HttpsError("permission-denied", "İşletme seçilmedi.");
+  }
+
+  const pointsOf = async (userUid) =>
+    pointsDocId ? (await db.collection("users").doc(userUid).collection("points").doc(pointsDocId).get()).data() : null;
+
+  const toMatch = async (authUser) => {
+    const profile = (await db.collection("users").doc(authUser.uid).get()).data() || {};
+    if (profile.role && profile.role !== "user") return null;
+    const points = await pointsOf(authUser.uid);
+    return {
+      uid: authUser.uid,
+      displayName: nameOf(profile, authUser),
+      email: profile.email || authUser.email || "",
+      phoneMasked: maskPhone(authUser.phoneNumber),
+      stamps: Number(points?.stamps ?? 0),
+      rewards: Number(points?.rewards ?? 0),
+      hasCard: !!points,
+    };
+  };
+
+  // 1) Tam numara → birebir
+  const full = normalizeTrPhone(raw);
+  if (full) {
+    try {
+      const m = await toMatch(await admin.auth().getUserByPhoneNumber(full));
+      return { matches: m ? [m] : [] };
+    } catch (err) {
+      if (err?.code !== "auth/user-not-found") throw err;
+      return { matches: [] };
+    }
+  }
+
+  // 2) Kısmi numara
+  const digits = queryDigits(raw);
+  if (digits.length < MIN_PARTIAL_DIGITS) {
+    throw new HttpsError("invalid-argument", `Telefonla aramak için en az ${MIN_PARTIAL_DIGITS} rakam girin.`);
+  }
+  const hit = (u) => u.phoneNumber && u.phoneNumber.replace(/\D/g, "").slice(2).includes(digits);
+
+  const found = [];
+  if (cafeId) {
+    // Bu işletmenin (zincirse zincirin) kart sahipleri
+    const uids = new Set();
+    const snap = await db.collectionGroup("points").where("cafeId", "==", cafeId).get();
+    snap.docs.forEach((d) => uids.add(d.data().userUid || d.ref.parent.parent.id));
+    if (chainId) {
+      try {
+        const chainSnap = await db.collectionGroup("points").where("chainId", "==", chainId).get();
+        chainSnap.docs.forEach((d) => uids.add(d.data().userUid || d.ref.parent.parent.id));
+      } catch (err) {
+        console.warn("[searchCustomersByPhone] chainId sorgusu", err.message);
+      }
+    }
+    const list = [...uids].filter(Boolean);
+    for (let i = 0; i < list.length && found.length < MAX_MATCHES; i += 100) {
+      const res = await admin.auth().getUsers(list.slice(i, i + 100).map((u) => ({ uid: u })));
+      found.push(...res.users.filter(hit));
+    }
+  } else {
+    let pageToken;
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken);
+      found.push(...page.users.filter(hit));
+      pageToken = page.pageToken;
+    } while (pageToken && found.length < MAX_MATCHES);
+  }
+
+  const matches = (await Promise.all(found.slice(0, MAX_MATCHES).map(toMatch))).filter(Boolean);
+  return { matches };
+}
+
+module.exports = { adjustPoints, findCustomerByPhone, searchCustomersByPhone, normalizeTrPhone };

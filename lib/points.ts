@@ -54,6 +54,23 @@ export async function findCustomerByPhone(phone: string, cafeId?: string): Promi
   }
 }
 
+/** Numaranın tamamı veya bir kısmı (≥3 rakam). Kısmi aramada owner sadece kendi kart sahiplerini görür. */
+const searchByPhoneFn = httpsCallable<{ phone: string; cafeId?: string }, { matches: PhoneCustomer[] }>(
+  functions,
+  "searchCustomersByPhone"
+);
+
+export async function searchCustomersByPhone(phone: string, cafeId?: string): Promise<PhoneCustomer[]> {
+  try {
+    return (await searchByPhoneFn({ phone, ...(cafeId && { cafeId }) })).data.matches;
+  } catch (err) {
+    throw friendly(err);
+  }
+}
+
+/** Arama metni bir telefon (parçası) mı: sadece rakam/boşluk/+()- ve en az 3 rakam. */
+export const isPhoneQuery = (q: string) => /^[\d\s()+-]+$/.test(q.trim()) && q.replace(/\D/g, "").length >= 3;
+
 /** Tam bir TR cep numarası mı? (0532 123 45 67, 5321234567, +90 532...) — sunucudaki normalizeTrPhone ile aynı kural. */
 export function isCompleteTrMobile(q: string): boolean {
   if (!/^[\d\s()+-]+$/.test(q.trim())) return false;

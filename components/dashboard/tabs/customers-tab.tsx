@@ -5,7 +5,7 @@ import { collectionGroup, collection, query, where, getDocs, getDoc, doc } from 
 import { Search, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
 import AdjustPointsForm from "@/components/points/adjust-points-form";
-import { findCustomerByPhone, isCompleteTrMobile, looksLikePhone } from "@/lib/points";
+import { isCompleteTrMobile, isPhoneQuery, searchCustomersByPhone } from "@/lib/points";
 import SectionTitle from "../ui/section-title";
 import { shellCardClass } from "../helpers";
 
@@ -35,10 +35,10 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
   const [flash, setFlash] = useState<{ uid: string; text: string } | null>(null);
   const [goal, setGoal] = useState<number | undefined>(undefined);
   // Telefonla kayıtlı müşteriler: numara Firestore'da yok, sunucudan numarayla bulunur
-  const [phoneMatch, setPhoneMatch] = useState<{ query: string; uid: string } | null>(null);
+  const [phoneMatch, setPhoneMatch] = useState<{ query: string; uids: string[] } | null>(null);
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState("");
-  const phoneSearch = looksLikePhone(search);
+  const phoneSearch = isPhoneQuery(search);
 
   const lastPhoneQuery = useRef("");
 
@@ -47,14 +47,22 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
     setPhoneBusy(true);
     setPhoneError("");
     try {
-      const r = await findCustomerByPhone(q, cafeId);
-      setCustomers((prev) =>
-        prev.some((x) => x.uid === r.uid)
-          ? prev.map((x) => (x.uid === r.uid ? { ...x, phoneMasked: r.phoneMasked } : x))
-          : [...prev, { uid: r.uid, displayName: r.displayName, email: r.email, stamps: r.stamps, rewards: r.rewards, phoneMasked: r.phoneMasked }]
-      );
-      setPhoneMatch({ query: q, uid: r.uid });
-      setSelectedUid(r.uid);
+      const found = await searchCustomersByPhone(q, cafeId);
+      if (found.length === 0) {
+        setPhoneError("Bu numarayla eşleşen müşteri bulunamadı.");
+        return;
+      }
+      setCustomers((prev) => {
+        const next = [...prev];
+        for (const r of found) {
+          const i = next.findIndex((x) => x.uid === r.uid);
+          if (i >= 0) next[i] = { ...next[i], phoneMasked: r.phoneMasked };
+          else next.push({ uid: r.uid, displayName: r.displayName, email: r.email, stamps: r.stamps, rewards: r.rewards, phoneMasked: r.phoneMasked });
+        }
+        return next;
+      });
+      setPhoneMatch({ query: q, uids: found.map((r) => r.uid) });
+      setSelectedUid(found.length === 1 ? found[0].uid : null);
     } catch (e) {
       setPhoneError((e as Error).message);
     } finally {
@@ -167,9 +175,9 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
     return () => { active = false; };
   }, [cafeId]);
 
-  const matchedByPhone = phoneMatch && phoneMatch.query === search ? phoneMatch.uid : null;
+  const matchedByPhone = phoneMatch && phoneMatch.query === search ? phoneMatch.uids : null;
   const filtered = matchedByPhone
-    ? customers.filter((c) => c.uid === matchedByPhone)
+    ? customers.filter((c) => matchedByPhone.includes(c.uid))
     : customers.filter((c) => {
         const q = search.toLowerCase();
         return (
@@ -263,7 +271,7 @@ export default function CustomersTab({ cafeId }: { cafeId: string }) {
               {/* Rows */}
               {phoneSearch && !matchedByPhone ? (
                 <div className="flex flex-col items-center gap-3 border-t border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                  <p>{phoneBusy ? "Numara aranıyor..." : "Telefonla kayıt olan müşteriler numarasıyla bulunur."}</p>
+                  <p>{phoneBusy ? "Numara aranıyor..." : "Numaranın tamamını veya bir kısmını yazıp Ara’ya basın."}</p>
                   <button
                     type="button"
                     onClick={() => lookupPhone(search)}
