@@ -1249,11 +1249,15 @@ export default function BusinessTab({ cafeId: cafeIdProp, chainId }: Props) {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Uygulamada Görünür</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Gizlenirse keşfet ekranında listelenmezsiniz.
+                    {form.isVisible || form.approvalStatus === "approved"
+                      ? "Gizlenirse keşfet ekranında listelenmezsiniz."
+                      : "İşletmeniz onaylandıktan sonra görünür yapabilirsiniz."}
                   </p>
                 </div>
+                {/* Görünür yapmak onay ister (firestore.rules ile aynı şart); gizlemek her zaman serbest. */}
                 <Toggle
                   checked={form.isVisible}
+                  disabled={!form.isVisible && form.approvalStatus !== "approved"}
                   onChange={() => update("isVisible", !form.isVisible)}
                 />
               </div>
