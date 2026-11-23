@@ -20,6 +20,8 @@ type Props = {
   logoUrl?: string;
   /** Kapak fotoğrafı: yoksa kapaklı tasarımlarda uyarı gösterilir. */
   heroImage?: string;
+  /** Kafenin ana logosu/kapağı var mı. Varsa menü onu kullanır; sihirbaz o alan için yükleme teklif etmez. */
+  mainMedia: { logo: boolean; hero: boolean };
   settings: QrMenuSettings;
   savedSlug: string | null;
   items: MenuItem[];
@@ -42,7 +44,7 @@ const designOf = (id: MenuLayout) => MENU_DESIGNS.find((d) => d.id === id) ?? ME
  * Menü Sihirbazı: sağdan açılan, adım adım kurulum. Logo ve içerikten tasarım ile renk önerir,
  * sonunda tek seferde kaydeder (ve istenirse yayına alır).
  */
-export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl: initialLogo, heroImage: initialHero, settings, savedSlug, items: existingItems, categories: existingCategories, onFinish, onGoToProducts, onClose, previewData }: Props) {
+export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, logoUrl: initialLogo, heroImage: initialHero, mainMedia, settings, savedSlug, items: existingItems, categories: existingCategories, onFinish, onGoToProducts, onClose, previewData }: Props) {
   const [media, setMedia] = useState<Partial<Record<"logoUrl" | "heroImage", File>>>({});
   const [mediaPreview, setMediaPreview] = useState<Partial<Record<"logoUrl" | "heroImage", string>>>({});
   const logoUrl = mediaPreview.logoUrl ?? initialLogo;
@@ -121,7 +123,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
   const canNext = !importBusy && (step !== 0 || slugOk);
   const localPreview: PreviewData = { ...previewData, cafe: { ...previewData.cafe, logoUrl, heroImage, qrMenu: { ...settings, slug, layout, theme: previewTheme } }, categories, items: items.filter((i) => i.isVisible) };
   const chooseMedia = (field: "logoUrl" | "heroImage", file?: File) => {
-    if (!file) return;
+    if (!file || (field === "logoUrl" ? mainMedia.logo : mainMedia.hero)) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) { setError("JPG, PNG veya WEBP seçin (en fazla 3 MB)."); return; }
     const reader = new FileReader();
     reader.onload = () => { setMedia((prev) => ({ ...prev, [field]: file })); setMediaPreview((prev) => ({ ...prev, [field]: String(reader.result) })); setError(""); };
@@ -218,7 +220,7 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                       <>
                         <p className="font-medium text-slate-900">Logo yüklenmemiş</p>
                         <p className="text-xs text-slate-500">
-                          Daha sonra İşletme Yönetimi&apos;nden ekleyebilirsiniz; şimdi hazır renklerle devam edin.
+                          Aşağıdan sadece menüde kullanılacak bir logo ekleyebilir ya da hazır renklerle devam edebilirsiniz.
                         </p>
                       </>
                     )}
@@ -226,7 +228,30 @@ export default function MenuWizard({ cafeId, cafeName, menuLive, onImported, log
                 </div>
               </section>
 
-              <div className="grid gap-3 sm:grid-cols-2">{(["logoUrl", "heroImage"] as const).map((field) => <label key={field} className="rounded-xl border border-dashed p-3 text-xs text-slate-600"><span className="mb-2 block font-semibold">{field === "logoUrl" ? "Logo ekle / değiştir" : "Kapak fotoğrafı ekle"}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { chooseMedia(field, e.target.files?.[0]); e.target.value = ""; }} className="w-full text-xs" /></label>)}</div><p className="text-xs text-slate-400">İsteğe bağlı · En fazla 3 MB · Son onayda kaydedilir.</p>
+              {/* Ana logo/kapak varsa menü onu kullanır ve burada değiştirilmez (uygulamadaki görsel etkilenmesin).
+                  Yoksa yüklenen görsel sadece menüde kullanılır. */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(["logoUrl", "heroImage"] as const).map((field) => {
+                  const isLogo = field === "logoUrl";
+                  const label = isLogo ? "logo" : "kapak fotoğrafı";
+                  if (isLogo ? mainMedia.logo : mainMedia.hero) {
+                    return (
+                      <p key={field} className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                        <span className="mb-1 block font-semibold text-slate-800">{isLogo ? "Ana logonuz kullanılıyor" : "Ana kapak fotoğrafınız kullanılıyor"}</span>
+                        Değiştirmek için İşletme Yönetimi&apos;ni kullanın.
+                      </p>
+                    );
+                  }
+                  return (
+                    <label key={field} className="rounded-xl border border-dashed p-3 text-xs text-slate-600">
+                      <span className="mb-1 block font-semibold">{isLogo ? "Menü logosu ekle" : "Menü kapak fotoğrafı ekle"}</span>
+                      <span className="mb-2 block text-slate-400">Sadece menüde görünür; uygulamadaki {label} değişmez.</span>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { chooseMedia(field, e.target.files?.[0]); e.target.value = ""; }} className="w-full text-xs" />
+                    </label>
+                  );
+                })}
+              </div>
+              {(!mainMedia.logo || !mainMedia.hero) && <p className="text-xs text-slate-400">İsteğe bağlı · En fazla 3 MB · Son onayda kaydedilir.</p>}
               <section className="space-y-2">
                 <p className="text-sm font-semibold text-slate-900">Menünüz</p>
                 <MenuImport

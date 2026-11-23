@@ -51,9 +51,12 @@ export type LoadedMenu = {
   previewCafe: PreviewData["cafe"];
   settings: QrMenuSettings;
   hasSettings: boolean;
-  /** Masa kartlarında kullanılır. */
+  /** Menüde kullanılan logo/kapak: kafenin ana görseli, yoksa menüye özel görsel. Masa kartlarında da kullanılır. */
   logoUrl?: string;
   heroImage?: string;
+  /** Kafenin ana logosu/kapağı var mı (varsa sihirbaz yeni görsel yüklemeyi teklif etmez). */
+  hasMainLogo: boolean;
+  hasMainHero: boolean;
   categories: MenuCategory[];
   items: MenuItem[];
 };
@@ -71,8 +74,10 @@ export async function loadQrMenu(cafeId: string, cafeName: string): Promise<Load
     previewCafe: { id: cafeId, name: cafeName, qrMenu: stored ?? { ...DEFAULT_SETTINGS, slug: slugify(cafeName) }, address: cafeData?.address, instagramUrl: cafeData?.instagramUrl, workingHours: cafeData?.workingHours, location: location?.latitude !== undefined && location?.longitude !== undefined ? { lat: location.latitude, lng: location.longitude } : undefined, loyaltyCards: (cafeData?.loyaltyCards ?? []).map((card: { id: string; itemTypeId: string; rewardBuy: number; rewardGift: number }) => ({ id: card.id, itemTypeId: card.itemTypeId, rewardBuy: card.rewardBuy, rewardGift: card.rewardGift })) },
     settings: stored ?? { ...DEFAULT_SETTINGS, slug: slugify(cafeName) },
     hasSettings: Boolean(stored),
-    logoUrl: (cafeSnap.data()?.logoUrl as string | undefined) || undefined,
-    heroImage: (cafeSnap.data()?.heroImage as string | undefined) || undefined,
+    logoUrl: (cafeData?.logoUrl as string | undefined) || stored?.menuLogoUrl || undefined,
+    heroImage: (cafeData?.heroImage as string | undefined) || stored?.menuHeroImage || undefined,
+    hasMainLogo: Boolean(cafeData?.logoUrl),
+    hasMainHero: Boolean(cafeData?.heroImage),
     categories: catSnap.docs
       .map((d) => ({ ...(d.data() as Omit<MenuCategory, "id">), id: d.id }))
       .sort((a, b) => a.sortOrder - b.sortOrder),
@@ -86,7 +91,7 @@ export async function loadQrMenu(cafeId: string, cafeName: string): Promise<Load
  * Ayarları kaydeder ve slug'ı menuSlugs'a yazar. Eski slug kaydı silinmez:
  * menü sitesi eski linke gelen ziyaretçiyi güncel slug'a yönlendirir.
  */
-export async function saveSettings(cafeId: string, settings: QrMenuSettings, pending?: { categories: MenuCategory[]; items: MenuItem[] }, media?: { logoUrl?: string; heroImage?: string }): Promise<void> {
+export async function saveSettings(cafeId: string, settings: QrMenuSettings, pending?: { categories: MenuCategory[]; items: MenuItem[] }): Promise<void> {
   if (!isValidSlug(settings.slug)) {
     throw new Error("Link adı en az 3 karakter olmalı; sadece küçük harf, rakam ve tire içerebilir.");
   }
@@ -100,7 +105,7 @@ export async function saveSettings(cafeId: string, settings: QrMenuSettings, pen
     const existing = await transaction.get(slugRef);
     if (existing.exists() && existing.data().cafeId !== cafeId) throw new Error(`"${settings.slug}" başka bir işletme tarafından kullanılıyor.`);
     if (!existing.exists()) transaction.set(slugRef, { cafeId, createdAt: serverTimestamp() });
-    transaction.update(doc(db, "cafes", cafeId), { qrMenu: clean(settings), ...media, updatedAt: serverTimestamp() });
+    transaction.update(doc(db, "cafes", cafeId), { qrMenu: clean(settings), updatedAt: serverTimestamp() });
     for (const { id, ...data } of pending?.categories ?? []) transaction.set(doc(categoriesCol(cafeId), id), clean(data));
     for (const { id, ...data } of pending?.items ?? []) transaction.set(doc(itemsCol(cafeId), id), clean(data));
   });
@@ -235,6 +240,7 @@ export async function uploadItemImage(cafeId: string, file: Blob): Promise<strin
   return getDownloadURL(storageRef);
 }
 
+/** Sadece menüde kullanılan logo/kapak yükler (qrMenu.menuLogoUrl / menuHeroImage); kafenin ana görsellerine dokunmaz. */
 export async function uploadMenuBranding(cafeId: string, file: File, field: "logoUrl" | "heroImage"): Promise<string> {
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) throw new Error("JPG, PNG veya WEBP seçin (en fazla 3 MB).");
   const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";

@@ -79,6 +79,12 @@ export type QrMenuSettings = {
   logoIsLight?: boolean;
   /** logoIsLight hangi logo dosyası için hesaplandı (logo değişince yeniden hesaplanır). */
   logoCheckedFor?: string;
+  /**
+   * Sadece menüde kullanılan logo / kapak (Menü Sihirbazı'ndan yüklenir). Kafenin ana logosu ve kapağı
+   * (cafes/{id}.logoUrl / heroImage: uygulama ve İşletme Yönetimi) varsa her zaman onlar kullanılır; bunlar değişmez.
+   */
+  menuLogoUrl?: string;
+  menuHeroImage?: string;
   enabled: boolean;
   slug: string;
   tagline?: LocalizedText;

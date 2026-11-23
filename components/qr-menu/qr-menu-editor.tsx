@@ -76,6 +76,8 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | undefined>();
   const [heroImage, setHeroImage] = useState<string | undefined>();
+  /** Kafenin ana logosu/kapağı (uygulama, İşletme Yönetimi) var mı; varsa menü onları kullanır, sihirbaz değiştirmez. */
+  const [mainMedia, setMainMedia] = useState({ logo: false, hero: false });
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [editing, setEditing] = useState<{ item: MenuItem; isNew: boolean } | null>(null);
@@ -142,6 +144,7 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
         setPreviewCafe(data.previewCafe);
         setLogoUrl(data.logoUrl);
         setHeroImage(data.heroImage);
+        setMainMedia({ logo: data.hasMainLogo, hero: data.hasMainHero });
         setCategories(data.categories);
         setItems(data.items);
       })
@@ -430,6 +433,7 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
           }}
           logoUrl={logoUrl}
           heroImage={heroImage}
+          mainMedia={mainMedia}
           settings={settings}
           savedSlug={savedSlug}
           items={items}
@@ -437,13 +441,13 @@ export default function QrMenuEditor({ cafeId, cafeName, title }: Props) {
           previewData={previewData!}
           onFinish={async (next, _publish, pending, media) => {
             // saveSettings link adını da kaydeder (ilk kurulumda menuSlugs kaydı açılır).
-            const updated = pending.items.length ? { ...next, pricesUpdatedAt: new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }) } : next;
-            const assets: { logoUrl?: string; heroImage?: string } = {};
-            if (media.logoUrl) assets.logoUrl = await uploadMenuBranding(cafeId, media.logoUrl, "logoUrl");
-            if (media.heroImage) assets.heroImage = await uploadMenuBranding(cafeId, media.heroImage, "heroImage");
-            await saveSettings(cafeId, updated, pending, assets);
-            if (assets.logoUrl) setLogoUrl(assets.logoUrl);
-            if (assets.heroImage) setHeroImage(assets.heroImage);
+            const updated: QrMenuSettings = pending.items.length ? { ...next, pricesUpdatedAt: new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }) } : { ...next };
+            // Sihirbazdan yüklenen görseller sadece menüye ait alanlara yazılır; kafenin ana logosu/kapağı varsa hiç kullanılmaz.
+            if (media.logoUrl && !mainMedia.logo) updated.menuLogoUrl = await uploadMenuBranding(cafeId, media.logoUrl, "logoUrl");
+            if (media.heroImage && !mainMedia.hero) updated.menuHeroImage = await uploadMenuBranding(cafeId, media.heroImage, "heroImage");
+            await saveSettings(cafeId, updated, pending);
+            if (updated.menuLogoUrl && !mainMedia.logo) setLogoUrl(updated.menuLogoUrl);
+            if (updated.menuHeroImage && !mainMedia.hero) setHeroImage(updated.menuHeroImage);
             setSettings(updated);
             setSavedSlug(next.slug);
             setSettingsFormKey((k) => k + 1);
